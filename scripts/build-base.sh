@@ -65,7 +65,7 @@ m68k-amigaos-g++ $FLAGS -std=gnu++17 $INC -Wall -c "$HERE/src/amiga/wxamiga_crt.
 m68k-amigaos-gcc $FLAGS -Wall -c "$HERE/src/amiga/wxamiga_stubs.c" -o "$B/wxamiga_stubs.o"
 for t in basetest wctest sockettest; do
     # shellcheck disable=SC2086
-    m68k-amigaos-g++ $CXXF "$HERE/tests/base/$t.cpp" "$B/wxamiga_crt.o" -o "$OUT/$t" \
+    m68k-amigaos-g++ $CXXF "$HERE/tests/base/$t.cpp" "$B/wxamiga_crt.o" "$B/wxamiga_stubs.o" -o "$OUT/$t" \
         -specs="$SPECS" $("$B/wx-config" --libs base,xml,net) -lsocket -lpthread -latomic
     m68k-amigaos-strip "$OUT/$t"
 done
