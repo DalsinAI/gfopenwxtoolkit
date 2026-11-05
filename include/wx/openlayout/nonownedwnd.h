@@ -96,6 +96,12 @@ protected:
     int m_olDownX, m_olDownY, m_olDownButton;
     void *m_olQueue;        // olui's events, given to wx after olui returns
     bool m_olRmbTrap;
+    // ChangeWindowBox is done later by Intuition: the boxes asked for and
+    // not yet reported back (their CHANGEWINDOWs show the older boxes)
+    int m_olBoxesAsked;
+    wxRect m_olBoxAsked;
+    unsigned long m_olBoxSecs;
+    wxSize m_olSeenSize;    // the window's size Intuition last reported
     // the window's title in Latin-1: Intuition keeps the pointer, so it
     // lives (AllocVec) until the window closes or the title changes
     char *m_olTitleText;

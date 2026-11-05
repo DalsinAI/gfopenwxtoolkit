@@ -139,6 +139,8 @@ void wxNonOwnedWindow::Init()
     m_olQueue = new EventQueue;
     m_olRmbTrap = false;
     m_olTitleText = NULL;
+    m_olBoxesAsked = 0;
+    m_olBoxSecs = 0;
 }
 
 bool wxNonOwnedWindow::Create(wxWindow *parent, wxWindowID id, const wxPoint& pos, const wxSize& size,
@@ -240,7 +242,10 @@ bool wxNonOwnedWindow::OLOpen()
     struct Screen *scr = wxOLGetScreen();
     if ( !scr )
         return false;
-    const unsigned long flags = OLGetFlags() | (IsKindOf(wxCLASSINFO(wxPopupWindow)) ? 0 : WFLG_ACTIVATE);
+    // not made active while a window has the mouse captured (a toolbar
+    // dragged in a frame of its own): the active window gets the mouse
+    const unsigned long flags = OLGetFlags() |
+        (IsKindOf(wxCLASSINFO(wxPopupWindow)) || wxWindow::GetCapture() ? 0 : WFLG_ACTIVATE);
     int l, t, r, b;
     GuessBorders(scr, flags, &l, &t, &r, &b);
     const int iw = wxMax(m_rect.width - l - r, 1), ih = wxMax(m_rect.height - t - b, 1);
@@ -309,6 +314,7 @@ bool wxNonOwnedWindow::OLOpen()
     m_olActive = IntuitionBase->ActiveWindow == m_olWin;
     gs_open.push_back(this);
 
+    m_olBoxesAsked = 0;
     OLSized();
     m_olLayoutNeeded = true;
     OLDrawPending();
@@ -467,7 +473,14 @@ void wxNonOwnedWindow::DoMoveWindow(int x, int y, int width, int height)
     const bool moved = x != m_rect.x || y != m_rect.y;
     m_rect = wxRect(x, y, width, height);
     if ( m_olWin && (sized || moved) )
-        ChangeWindowBox(m_olWin, x, y, width, height);   // NEWSIZE follows
+    {
+        ChangeWindowBox(m_olWin, x, y, width, height);   // CHANGEWINDOW follows
+        m_olBoxesAsked++;
+        m_olBoxAsked = m_rect;
+        ULONG secs, micros;
+        CurrentTime(&secs, &micros);
+        m_olBoxSecs = secs;
+    }
     if ( sized )
     {
         wxSizeEvent ev(wxSize(width, height), GetId());
@@ -523,6 +536,24 @@ void wxNonOwnedWindow::OLSized()
     if ( !m_olWin )
         return;
     const wxRect now(m_olWin->LeftEdge, m_olWin->TopEdge, m_olWin->Width, m_olWin->Height);
+    const bool resized = now.GetSize() != m_olSeenSize;
+    m_olSeenSize = now.GetSize();
+    if ( m_olBoxesAsked > 0 )
+    {
+        // a box the program asked for: wx has it already (DoMoveWindow).
+        // Until the last one is done the reports are older boxes, which
+        // would move the window back (a drag that stutters); two seconds
+        // without the last one: Intuition changed the box, take what it is
+        ULONG secs, micros;
+        CurrentTime(&secs, &micros);
+        if ( now != m_olBoxAsked && secs - m_olBoxSecs < 2 )
+        {
+            if ( resized )
+                m_olLayoutNeeded = true;
+            return;
+        }
+        m_olBoxesAsked = 0;
+    }
     const bool sized = now.GetSize() != m_rect.GetSize();
     const bool moved = now.GetPosition() != m_rect.GetPosition();
     m_rect = now;
@@ -538,7 +569,9 @@ void wxNonOwnedWindow::OLSized()
         ev.SetEventObject(this);
         HandleWindowEvent(ev);
     }
-    m_olLayoutNeeded = true;
+    // a move alone needs no new layout: what it uncovered comes as REFRESHWINDOW
+    if ( sized || resized )
+        m_olLayoutNeeded = true;
 }
 
 // ---- drawing --------------------------------------------------------------------------
@@ -816,6 +849,21 @@ void wxNonOwnedWindow::OLMouseMessage(struct IntuiMessage *msg)
     int cx = 0, cy = 0;
     wxWindow *target = NULL;
     wxWindow *cap = wxWindow::GetCapture();
+    if ( cap && (msg->Class == IDCMP_MOUSEBUTTONS || msg->Class == IDCMP_MOUSEMOVE) )
+    {
+        // the mouse is captured in another of the program's windows: it is
+        // that window's, where it is on the screen
+        wxNonOwnedWindow *other = cap->OLGetTLW();
+        if ( other && other != this && other->m_olWin )
+        {
+            struct IntuiMessage m = *msg;
+            m.MouseX = msg->MouseX + m_olWin->LeftEdge - other->m_olWin->LeftEdge;
+            m.MouseY = msg->MouseY + m_olWin->TopEdge - other->m_olWin->TopEdge;
+            m.IDCMPWindow = other->m_olWin;
+            other->OLMouseMessage(&m);
+            return;
+        }
+    }
     if ( m_olUI && olui_popup(m_olUI) )
     {
         // a select's list or a menu is open: olui has the pointer everywhere
@@ -887,7 +935,17 @@ void wxNonOwnedWindow::OLMouseMessage(struct IntuiMessage *msg)
         m_olPressed = target;
     }
     wxWindow *const was = target;
-    target->OLMouse(what, cx, cy, qual);
+    const bool taken = target->OLMouse(what, cx, cy, qual);
+    if ( what == wxEVT_RIGHT_UP && !taken && m_olWin )
+    {
+        // as Windows does: a right click nobody took asks for a context menu
+        // (the event goes up to the parents until one takes it)
+        wxContextMenuEvent ctx(wxEVT_CONTEXT_MENU, target->GetId(), target->ClientToScreen(wxPoint(cx, cy)));
+        ctx.SetEventObject(target);
+        target->HandleWindowEvent(ctx);
+        if ( !m_olWin )
+            return;
+    }
     if ( up && m_olPressed == was )
     {
         m_olPressed = NULL;
