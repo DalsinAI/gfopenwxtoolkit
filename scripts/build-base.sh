@@ -45,12 +45,12 @@ if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
     # libnix has dlopen (libnix.a), but configure's probe redeclares it and
     # trips over dlfcn.h, which amigacompat.h brings in
     (cd "$B" && ac_cv_func_wcsftime=no ac_cv_func_dlopen=yes ac_cv_func_dlerror=yes CFLAGS="$FLAGS" CXXFLAGS="$FLAGS" CPPFLAGS="$INC" \
-        LDFLAGS="-noixemul -m68040 -specs=$SPECS" LIBS="-lpthread -latomic" \
+        LDFLAGS="-noixemul -m68040 -specs=$SPECS" LIBS="-lsocket -lpthread -latomic" \
         "$SRC/configure" --host=m68k-amigaos --build="$(sh "$SRC/config.guess")" \
         --disable-gui --disable-shared --enable-unicode --disable-sys-libs \
         --with-zlib=builtin --with-regex=builtin --with-expat=builtin \
         --enable-dynlib --disable-dynamicloader --enable-threads --disable-tests \
-        --disable-sockets --disable-ipc --disable-webrequest --without-subdirs > configure.log 2>&1) \
+        --enable-sockets --disable-ipc --disable-webrequest --without-subdirs > configure.log 2>&1) \
         || { tail -30 "$B/configure.log"; exit 1; }
     # static only: no position-independent code (m68k-amigaos has no GOT)
     sed -i 's/ -fPIC -DPIC//; s/^PIC_FLAG = .*/PIC_FLAG =/' "$B/Makefile"
@@ -63,10 +63,10 @@ CXXF="$FLAGS -std=gnu++17 $INC $("$B/wx-config" --cxxflags | sed 's/ -fPIC -DPIC
 m68k-amigaos-g++ $FLAGS -std=gnu++17 $INC -Wall -c "$HERE/src/amiga/wxamiga_crt.cpp" -o "$B/wxamiga_crt.o"
 # shellcheck disable=SC2086
 m68k-amigaos-gcc $FLAGS -Wall -c "$HERE/src/amiga/wxamiga_stubs.c" -o "$B/wxamiga_stubs.o"
-for t in basetest wctest; do
+for t in basetest wctest sockettest; do
     # shellcheck disable=SC2086
     m68k-amigaos-g++ $CXXF "$HERE/tests/base/$t.cpp" "$B/wxamiga_crt.o" -o "$OUT/$t" \
-        -specs="$SPECS" $("$B/wx-config" --libs base,xml) -lpthread -latomic
+        -specs="$SPECS" $("$B/wx-config" --libs base,xml,net) -lsocket -lpthread -latomic
     m68k-amigaos-strip "$OUT/$t"
 done
 ls -l "$OUT"
