@@ -50,7 +50,7 @@ if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
         --disable-gui --disable-shared --enable-unicode --disable-sys-libs \
         --with-zlib=builtin --with-regex=builtin --with-expat=builtin \
         --enable-dynlib --disable-dynamicloader --enable-threads --disable-tests \
-        --enable-sockets --disable-ipc --disable-webrequest --without-subdirs > configure.log 2>&1) \
+        --enable-sockets --disable-ipv6 --disable-ipc --disable-webrequest --without-subdirs > configure.log 2>&1) \
         || { tail -30 "$B/configure.log"; exit 1; }
     # static only: no position-independent code (m68k-amigaos has no GOT)
     sed -i 's/ -fPIC -DPIC//; s/^PIC_FLAG = .*/PIC_FLAG =/' "$B/Makefile"
