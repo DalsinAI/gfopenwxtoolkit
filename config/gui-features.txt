@@ -25,6 +25,9 @@ FILECTRL FILEDLG DIRDLG COLOURDLG FONTDLG FINDREPLDLG LOGGUI LOG_DIALOG ARTPROVI
 # wx's other libraries Audacity uses: html (help and About pages), on the
 # common code alone
 HTML
+# wx's docking library (frames, notebooks and tool bars it draws itself with
+# its generic art), for programs such as wxHexEditor
+AUI
 # off: wx's own TIFF reader isn't needed (PNG and JPEG are built in, from wx's src/png and src/jpeg)
 !LIBTIFF
 # off: wx's debug report needs its qa library and a network to send to

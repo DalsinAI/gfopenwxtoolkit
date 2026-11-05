@@ -27,3 +27,6 @@ src/unix/sound.cpp
 # Cairo's renderer: without Cairo it defines a GetDefaultRenderer() that
 # returns NULL, beside our own in src/openlayout/graphics.cpp
 -src/generic/graphicc.cpp
+# aui's XRC handlers: no XRC in this build
+-src/xrc/xh_aui.cpp
+-src/xrc/xh_auitoolb.cpp
