@@ -1,0 +1,15 @@
+--- a/src/common/filename.cpp	2026-11-04 21:14:56.118185251 +0000
++++ b/src/common/filename.cpp	2026-11-04 21:14:56.134346001 +0000
+@@ -1255,7 +1255,11 @@
+     // fall back to hard coded value
+     else
+     {
+-#ifdef __UNIX_LIKE__
++#if defined(__AMIGA__)
++        // AmigaOS: T: is the temporary directory, as wxStandardPaths says
++        dir = CheckIfDirExists("T:");
++        if ( dir.empty() )
++#elif defined(__UNIX_LIKE__)
+         dir = CheckIfDirExists("/tmp");
+         if ( dir.empty() )
+ #endif // __UNIX_LIKE__

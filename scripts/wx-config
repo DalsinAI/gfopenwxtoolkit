@@ -1,0 +1,83 @@
+#!/bin/sh
+# wx-config for gfopenwx (wxWidgets on GFOpenLayout UI, AmigaOS 3.x, 68040):
+# what a program's build asks wx's own wx-config, answered for this port's
+# one static configuration (openlayout, unicode, release). The GUI
+# libraries (core, adv, html, qa, ...) are all in one library, so any of
+# them gives that one; base, xml and net are wx's own base libraries. The
+# prefix is where this
+# script is, one up.
+# Copyright (c) 2026 AmiCradle Team
+
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+prefix=$(dirname "$here")
+version=3.2.12
+release=3.2
+config=openlayout-unicode-static-$release
+
+cxxflags="-I$prefix/lib/wx/include/$config -I$prefix/include/wx-$release -include wx/openlayout/amigacompat.h -D__WXOPENLAYOUT__ -D_FILE_OFFSET_BITS=64"
+want_libs=0
+gui=0
+base=0
+xml=0
+net=0
+out=""
+status=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --prefix=*|--exec-prefix=*|--toolkit=openlayout|--toolkit=*|--version=*|--host=*|--baselib|--optional-libs) ;;
+        --flavour=release|--flavor=release|--debug=no|--unicode=yes|--static=yes|--universal=no) ;;
+        --flavour=*|--flavor=*|--debug=*|--debug|--unicode=no|--static=no|--universal=yes|--universal) status=1 ;;
+        --unicode|--static) ;;
+        --version) out="$out $version" ;;
+        --release) out="$out $release" ;;
+        --basename) out="$out wx_openlayoutu" ;;
+        --selected-config) out="$out $config" ;;
+        --list) out="$out $config" ;;
+        --prefix) out="$out $prefix" ;;
+        --exec-prefix) out="$out $prefix" ;;
+        --cc) out="$out m68k-amigaos-gcc" ;;
+        --cxx) out="$out m68k-amigaos-g++" ;;
+        --ld) out="$out m68k-amigaos-g++" ;;
+        --cppflags|--cxxflags|--cflags) out="$out $cxxflags" ;;
+        --libs) want_libs=1 ;;
+        --*) ;;
+        *)
+            # the libraries asked for, comma separated (after --libs or
+            # --optional-libs)
+            for c in $(echo "$arg" | tr ',' ' '); do
+                case "$c" in
+                    base) base=1 ;;
+                    xml) xml=1; base=1 ;;
+                    net) net=1; base=1 ;;
+                    std|all) base=1; gui=1; xml=1; net=1 ;;
+                    *) gui=1 ;;
+                esac
+            done
+            ;;
+    esac
+done
+
+if [ "$status" != 0 ]; then
+    exit "$status"
+fi
+if [ "$want_libs" = 1 ]; then
+    if [ "$gui" = 0 ] && [ "$base" = 0 ]; then
+        gui=1; base=1
+    fi
+    # one group: the libraries call each other both ways. Ours are given by
+    # their full paths and the toolchain's through -Wl, so a cross build
+    # (CMake's FindwxWidgets looks up every -l in its sysroot) takes them
+    # as they are.
+    L="$prefix/lib"
+    libs="-L$L -Wl,--start-group"
+    if [ "$gui" = 1 ]; then
+        libs="$libs $L/libwx_openlayoutu_core-$release.a $L/libgfopenlayout_ui.a $L/libwxpng-$release.a $L/libwxjpeg-$release.a"
+    fi
+    [ "$xml" = 1 ] && libs="$libs $L/libwx_baseu_xml-$release.a"
+    [ "$net" = 1 ] && libs="$libs $L/libwx_baseu_net-$release.a"
+    libs="$libs $L/libwx_baseu-$release.a $L/libwxregexu-$release.a $L/libwxzlib-$release.a $L/libwxexpat-$release.a $L/libwxamiga-$release.a -Wl,--end-group -Wl,-lsocket,-lpthread,-latomic,-lm,-lamiga"
+    out="$out $libs"
+fi
+[ -n "$out" ] && echo $out
+exit 0

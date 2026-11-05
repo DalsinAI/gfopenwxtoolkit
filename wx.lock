@@ -1,0 +1,4 @@
+# The wxWidgets release this port builds on: fetched at build time, never shipped.
+WX_VERSION=3.2.12
+WX_URL=https://github.com/wxWidgets/wxWidgets/releases/download/v3.2.12/wxWidgets-3.2.12.tar.bz2
+WX_SHA256=a62719bb5e1dcc41c1a6fc1eecd499c7ee8521f70402c7b1bb3342a1e16344e0

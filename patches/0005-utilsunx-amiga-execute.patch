@@ -1,0 +1,60 @@
+diff -ruN a/src/unix/utilsunx.cpp b/src/unix/utilsunx.cpp
+--- a/src/unix/utilsunx.cpp	2026-11-05 02:49:45.588554800 +0000
++++ b/src/unix/utilsunx.cpp	2026-11-05 02:51:26.141095193 +0000
+@@ -594,6 +594,44 @@
+ } // anonymous namespace
+ 
+ // wxExecute: the real worker function
++#ifdef __AMIGA__
++// AmigaOS has no fork(): libnix's fork() returns 0 and its execvp() runs the
++// program in place, without its arguments. dos.library starts the command
++// instead, with its whole command line (wxamiga_crt.cpp): in the background
++// in a CLI of its own (wxEXEC_ASYNC), or waiting for its return code
++// (wxEXEC_SYNC). The child's input and output are NIL: when async, the
++// caller's when sync; redirecting them through wxProcess is not supported.
++extern "C" long wxAmigaExecuteLine(const char *line, int sync);
++namespace
++{
++long wxAmigaExecute(const char* const* argv, int flags)
++{
++    wxString cmd;
++    for ( const char* const* a = argv; *a; a++ )
++    {
++        wxString arg = wxString::FromUTF8(*a);
++        if ( !cmd.empty() )
++            cmd += ' ';
++        if ( arg.empty() || arg.find_first_of(" \t\"*") != wxString::npos )
++        {
++            // AmigaDOS quoting: "..." with *" for a quote and ** for a star
++            wxString q;
++            for ( wxString::const_iterator c = arg.begin(); c != arg.end(); ++c )
++            {
++                if ( *c == '"' || *c == '*' )
++                    q += '*';
++                q += *c;
++            }
++            cmd += '"' + q + '"';
++        }
++        else
++            cmd += arg;
++    }
++    return wxAmigaExecuteLine(cmd.mb_str(), (flags & wxEXEC_SYNC) != 0);
++}
++} // anonymous namespace
++#endif // __AMIGA__
++
+ long wxExecute(const char* const* argv, int flags, wxProcess* process,
+         const wxExecuteEnv *env)
+ {
+@@ -626,6 +664,11 @@
+         return pid;
+     }
+ #endif // __DARWIN__
++#ifdef __AMIGA__
++    wxUnusedVar(process);
++    wxUnusedVar(env);
++    return wxAmigaExecute(argv, flags);
++#endif // __AMIGA__
+ 
+     // this struct contains all information which we use for housekeeping
+     wxScopedPtr<wxExecuteData> execDataPtr(new wxExecuteData);

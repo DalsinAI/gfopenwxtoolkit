@@ -1,0 +1,16 @@
+# Lines wxWidgets' own files must change for the openlayout toolkit, beyond
+# the dispatch branches scripts/add-toolkit.py adds: FILE<TAB>OLD<TAB>NEW,
+# \n for a new line; each OLD must be found exactly once.
+include/wx/defs.h	         !defined(__WXQT__)    && \	         !defined(__WXQT__)    && \\n         !defined(__WXOPENLAYOUT__) && \
+include/wx/defs.h	#ifdef __WXQT__\n#include "wx/qt/defs.h"\n#endif	#ifdef __WXQT__\n#include "wx/qt/defs.h"\n#endif\n#ifdef __WXOPENLAYOUT__\n#include "wx/openlayout/defs.h"\n#endif
+include/wx/platform.h	!defined(__WXX11__) && !defined(__WXQT__)	!defined(__WXX11__) && !defined(__WXQT__) && !defined(__WXOPENLAYOUT__)
+include/wx/bitmap.h	    defined(__WXQT__)\n    #define wxUSE_BITMAP_BASE 1	    defined(__WXQT__) || \\n    defined(__WXOPENLAYOUT__)\n    #define wxUSE_BITMAP_BASE 1
+include/wx/dcbuffer.h	defined(__WXDFB__) || defined(__WXQT__)	defined(__WXDFB__) || defined(__WXQT__) || defined(__WXOPENLAYOUT__)
+include/wx/features.h	        defined(__WXMSW__) || defined(__WXQT__)\n	        defined(__WXMSW__) || defined(__WXQT__) || defined(__WXOPENLAYOUT__)\n
+include/wx/features.h	#if wxUSE_PANGO || defined(__WXDFB__)	#if wxUSE_PANGO || defined(__WXDFB__) || defined(__WXOPENLAYOUT__)
+include/wx/rawbmp.h	#elif defined(__WXQT__)	#elif defined(__WXOPENLAYOUT__)\n    // wxBitmap is ARGB, 4 bytes a pixel, as cybergraphics' RECTFMT_ARGB\n    typedef wxPixelFormat<unsigned char, 32, 1, 2, 3> wxNativePixelFormat;\n\n    #define wxPIXEL_FORMAT_ALPHA 0\n#elif defined(__WXQT__)
+include/wx/dataobj.h	    #if defined(__WXGTK20__) || defined(__WXX11__) || defined(__WXQT__)	    #if defined(__WXGTK20__) || defined(__WXX11__) || defined(__WXQT__) || defined(__WXOPENLAYOUT__)
+src/common/dcbase.cpp	#ifdef __WXQT__\n    #include "wx/qt/dcclient.h"	#ifdef __WXOPENLAYOUT__\n    #include "wx/openlayout/dcclient.h"\n    #include "wx/openlayout/dcmemory.h"\n    #include "wx/openlayout/dcscreen.h"\n#endif\n#ifdef __WXQT__\n    #include "wx/qt/dcclient.h"
+include/wx/bmpbuttn.h	#if (defined(__WXMSW__) || defined(__WXGTK20__) || defined(__WXOSX__) || defined(__WXQT__)) && !defined(__WXUNIVERSAL__)	#if (defined(__WXMSW__) || defined(__WXGTK20__) || defined(__WXOSX__) || defined(__WXQT__) || defined(__WXOPENLAYOUT__)) && !defined(__WXUNIVERSAL__)
+include/wx/bitmap.h	#if defined(__WXDFB__)\n    #define wxUSE_GENERIC_MASK 1	#if defined(__WXDFB__) || defined(__WXOPENLAYOUT__)\n    #define wxUSE_GENERIC_MASK 1
+src/unix/sound.cpp	        if (!ms_backend)\n            ms_backend = new wxSoundBackendNull();	#ifdef __WXOPENLAYOUT__\n        if (!ms_backend)\n        {\n            extern wxSoundBackend *wxCreateSoundBackendAHI();\n            ms_backend = wxCreateSoundBackendAHI();\n            if (!ms_backend->IsAvailable())\n                wxDELETE(ms_backend);\n        }\n#endif\n        if (!ms_backend)\n            ms_backend = new wxSoundBackendNull();

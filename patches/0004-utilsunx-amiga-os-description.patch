@@ -1,0 +1,76 @@
+--- a/src/unix/utilsunx.cpp	2026-11-04 22:34:57.877514607 +0000
++++ b/src/unix/utilsunx.cpp	2026-11-04 22:35:11.030212383 +0000
+@@ -1124,9 +1124,41 @@
+ #endif
+ }
+ 
++#ifdef __AMIGA__
++// AmigaOS has no uname: the CPU and the system's version come from
++// exec.library (version 47 is AmigaOS 3.2, 46 is 3.1.4, 45 is 3.9, 40 is 3.1)
++#include <exec/execbase.h>
++extern "C" struct ExecBase *SysBase;
++namespace
++{
++const char *wxAmigaCpuName()
++{
++    const UWORD f = SysBase->AttnFlags;
++    if ( f & AFF_68060 ) return "m68060";
++    if ( f & AFF_68040 ) return "m68040";
++    if ( f & AFF_68030 ) return "m68030";
++    if ( f & AFF_68020 ) return "m68020";
++    if ( f & AFF_68010 ) return "m68010";
++    return "m68000";
++}
++
++void wxAmigaRelease(int *major, int *minor, int *micro)
++{
++    const UWORD v = SysBase->LibNode.lib_Version;
++    *major = v < 36 ? 1 : v < 39 ? 2 : 3;
++    *minor = v >= 47 ? 2 : v >= 45 ? 9 : v >= 40 ? 1 : 0;
++    *micro = v == 46 ? 4 : 0;
++}
++} // anonymous namespace
++#endif // __AMIGA__
++
+ wxString wxGetCpuArchitectureName()
+ {
++#ifdef __AMIGA__
++    return wxAmigaCpuName();
++#else
+     return wxGetCommandOutput(wxT("uname -m"));
++#endif
+ }
+ 
+ wxString wxGetNativeCpuArchitectureName()
+@@ -1213,6 +1245,14 @@
+ 
+ wxOperatingSystemId wxGetOsVersion(int *verMaj, int *verMin, int *verMicro)
+ {
++#ifdef __AMIGA__
++    int amigaMajor, amigaMinor, amigaMicro;
++    wxAmigaRelease(&amigaMajor, &amigaMinor, &amigaMicro);
++    if ( verMaj ) *verMaj = amigaMajor;
++    if ( verMin ) *verMin = amigaMinor;
++    if ( verMicro ) *verMicro = amigaMicro;
++    return wxOS_UNKNOWN;
++#endif
+     // get OS version
+     int major = -1, minor = -1, micro = -1;
+ #ifdef __VMS
+@@ -1261,7 +1301,15 @@
+ 
+ wxString wxGetOsDescription()
+ {
+-#ifdef __VMS
++#ifdef __AMIGA__
++    int amigaMajor, amigaMinor, amigaMicro;
++    wxAmigaRelease(&amigaMajor, &amigaMinor, &amigaMicro);
++    const wxString release = amigaMicro ? wxString::Format("%d.%d.%d", amigaMajor, amigaMinor, amigaMicro)
++                                        : wxString::Format("%d.%d", amigaMajor, amigaMinor);
++    return wxString::Format("AmigaOS %s (exec %u.%u) %s", release,
++                            (unsigned)SysBase->LibNode.lib_Version,
++                            (unsigned)SysBase->LibNode.lib_Revision, wxAmigaCpuName());
++#elif defined(__VMS)
+     return wxGetCommandOutput(wxT("uname -s -v -m"));
+ #else
+     return wxGetCommandOutput(wxT("uname -s -r -m"));

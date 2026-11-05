@@ -1,0 +1,29 @@
+# wx's own sources the openlayout port builds besides GUI_CMN_SRC (build/files):
+# the generic classes it uses where it has no class of its own, as wxQt does.
+# A line starting with - takes a file out of wx's own lists.
+src/generic/accel.cpp
+src/generic/activityindicator.cpp
+src/generic/caret.cpp
+src/generic/clrpickerg.cpp
+src/generic/collpaneg.cpp
+src/generic/colour.cpp
+src/generic/colrdlgg.cpp
+src/generic/dirdlgg.cpp
+src/generic/fdrepdlg.cpp
+src/generic/filedlgg.cpp
+src/generic/filepickerg.cpp
+src/generic/fontdlgg.cpp
+src/generic/fontpickerg.cpp
+src/generic/icon.cpp
+src/generic/imaglist.cpp
+src/generic/listctrl.cpp
+src/generic/mask.cpp
+src/generic/paletteg.cpp
+src/generic/regiong.cpp
+src/generic/statusbr.cpp
+src/generic/textmeasure.cpp
+src/common/taskbarcmn.cpp
+src/unix/sound.cpp
+# Cairo's renderer: without Cairo it defines a GetDefaultRenderer() that
+# returns NULL, beside our own in src/openlayout/graphics.cpp
+-src/generic/graphicc.cpp

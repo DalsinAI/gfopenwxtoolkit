@@ -1,0 +1,31 @@
+# wxUSE_ switches turned on for the GUI library (gfopenwx's setup.h is the
+# base build's configure output with these set to 1). Grouped by milestone;
+# a switch goes here once its class works or wx's generic one does.
+GUI
+# windows, events, drawing
+ACCEL CARET CONSTRAINTS DISPLAY MOUSEWHEEL PALETTE POPUPWIN TOOLTIPS VALIDATORS
+GRAPHICS_CONTEXT
+IMAGE XPM PNM TGA GIF ICO_CUR IMAGLIST
+CLIPBOARD DRAG_AND_DROP DRAGIMAGE
+MENUS MENUBAR STATUSBAR
+# controls
+CONTROLS BUTTON BMPBUTTON TOGGLEBTN CHECKBOX RADIOBTN RADIOBOX STATTEXT STATBOX STATBMP STATLINE
+TEXTCTRL CHOICE COMBOBOX LISTBOX CHECKLISTBOX SLIDER GAUGE SCROLLBAR SPINBTN SPINCTRL
+LISTCTRL TREECTRL NOTEBOOK TREEBOOK DATEPICKCTRL CALENDARCTRL
+# (wxUSE_SOUND is already on in the base setup: wx's unix wxSound, on our
+# AHI backend in src/openlayout/sound.cpp)
+# splash screen (generic)
+SPLASH
+# generic widgets wx draws itself through the DC
+COLLPANE HYPERLINKCTRL SPLITTER GRID DATAVIEWCTRL HEADERCTRL COMBOCTRL ODCOMBOBOX
+SEARCHCTRL MINIFRAME TIPWINDOW SASH INFOBAR REARRANGECTRL EDITABLELISTBOX MARKUP
+# dialogs (wx's generic ones)
+COMMON_DIALOGS MSGDLG RICHMSGDLG ABOUTDLG CHOICEDLG TEXTDLG NUMBERDLG PROGRESSDLG BUSYINFO
+FILECTRL FILEDLG DIRDLG COLOURDLG FONTDLG FINDREPLDLG LOGGUI LOG_DIALOG ARTPROVIDER_STD
+# wx's other libraries Audacity uses: html (help and About pages), on the
+# common code alone
+HTML
+# off: wx's own TIFF reader isn't needed (PNG and JPEG are built in, from wx's src/png and src/jpeg)
+!LIBTIFF
+# off: wx's debug report needs its qa library and a network to send to
+!DEBUGREPORT

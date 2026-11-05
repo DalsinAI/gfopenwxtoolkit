@@ -1,0 +1,17 @@
+--- a/src/common/filename.cpp	2026-11-04 22:14:03.818797663 +0000
++++ b/src/common/filename.cpp	2026-11-04 22:14:03.834732586 +0000
+@@ -1796,6 +1796,14 @@
+         }
+     }
+ 
++#if defined(__AMIGA__)
++    // AmigaOS: a path naming a volume or assign (RAM:T/x, SYS:Prefs) is
++    // absolute, though it does not start with a separator
++    if ( !m_dirs.IsEmpty() ? m_dirs[0u].Find(wxT(':')) != wxNOT_FOUND
++                           : m_name.Find(wxT(':')) != wxNOT_FOUND )
++        return true;
++#endif // __AMIGA__
++
+     // if our path doesn't start with a path separator, it's not an absolute
+     // path
+     if ( m_relative )
