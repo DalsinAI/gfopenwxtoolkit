@@ -96,6 +96,8 @@ protected:
     int m_olDownX, m_olDownY, m_olDownButton;
     void *m_olQueue;        // olui's events, given to wx after olui returns
     bool m_olRmbTrap;
+    bool m_olMouseTaken;    // the last button or move OLMouseMessage gave to a wx window was handled
+    bool m_olRmbOwned;      // a right press a window took, the menus cancelled for it
     // ChangeWindowBox is done later by Intuition: the boxes asked for and
     // not yet reported back (their CHANGEWINDOWs show the older boxes)
     int m_olBoxesAsked;
@@ -119,6 +121,11 @@ private:
     void Init();
     void OLRunQueue();
     void OLMouseMessage(struct IntuiMessage *msg);
+public:
+    // IDCMP_MENUVERIFY (MENUHOT): true when the window under the pointer
+    // takes the right press, so the menus are cancelled
+    bool OLMenuVerify(const struct IntuiMessage *msg);
+private:
     void OLKeyMessage(struct IntuiMessage *msg);
     wxWindow *OLWindowAt(int x, int y, int *cx, int *cy) const;
 

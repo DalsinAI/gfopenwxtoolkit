@@ -141,6 +141,8 @@ void wxNonOwnedWindow::Init()
     m_olTitleText = NULL;
     m_olBoxesAsked = 0;
     m_olBoxSecs = 0;
+    m_olMouseTaken = false;
+    m_olRmbOwned = false;
 }
 
 bool wxNonOwnedWindow::Create(wxWindow *parent, wxWindowID id, const wxPoint& pos, const wxSize& size,
@@ -288,7 +290,7 @@ bool wxNonOwnedWindow::OLOpen()
     m_olWin->UserData = (BYTE *)this;
     m_olWin->UserPort = wxOLSharedPort();
     ModifyIDCMP(m_olWin, (olui_amiga_idcmp() & ~IDCMP_VANILLAKEY) | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW |
-                         IDCMP_MENUPICK | IDCMP_CHANGEWINDOW | IDCMP_EXTENDEDMOUSE);
+                         IDCMP_MENUPICK | IDCMP_MENUVERIFY | IDCMP_CHANGEWINDOW | IDCMP_EXTENDEDMOUSE);
 
     m_olAmiga = olui_amiga_new(m_olUI, m_olWin);
     if ( !gs_themed )
@@ -752,10 +754,11 @@ void wxNonOwnedWindow::OLRunQueue()
 
 void wxNonOwnedWindow::OLSetRmbTrap(bool on)
 {
-    // a window without a menu strip has the right button always
+    // a window without a menu strip has the right button always; one with
+    // menus asks the window under the pointer first (OLMenuVerify)
     if ( !m_olWin )
         return;
-    on = on || !m_olWin->MenuStrip;
+    on = !m_olWin->MenuStrip;
     if ( on == m_olRmbTrap )
         return;
     m_olRmbTrap = on;
@@ -816,11 +819,61 @@ static bool OLWheelToWx(wxWindow *tlw, struct olui *ui, int what, int x, int y, 
     return true;
 }
 
+bool wxNonOwnedWindow::OLMenuVerify(const struct IntuiMessage *msg)
+{
+    // the right button went down in this window, which has menus: the window
+    // under the pointer gets the press first (a context menu, a drag), and
+    // the menus open only when nothing takes it
+    if ( !m_olWin || (m_olUI && olui_popup(m_olUI)) )
+        return false;
+    const int x = msg->MouseX - m_olWin->BorderLeft, y = msg->MouseY - m_olWin->BorderTop;
+    if ( x < 0 || y < 0 || x >= m_olWin->Width - m_olWin->BorderLeft - m_olWin->BorderRight ||
+         y >= m_olWin->Height - m_olWin->BorderTop - m_olWin->BorderBottom )
+        return false;    // the title bar or a border: the menus
+    int cx, cy;
+    if ( !wxWindow::GetCapture() && !OLWindowAt(x, y, &cx, &cy) )
+        return false;    // one of olui's widgets
+    struct IntuiMessage down = *msg;
+    down.Class = IDCMP_MOUSEBUTTONS;
+    down.Code = MENUDOWN;
+    down.Qualifier |= IEQUALIFIER_RBUTTON;
+    OLMouseMessage(&down);
+    if ( !m_olWin )
+        return true;
+    if ( !m_olMouseTaken )
+    {
+        // nobody wanted it: no button is down as far as wx goes
+        m_olPressed = NULL;
+        m_olDownSecs = m_olDownMicros = 0;
+        return false;
+    }
+    m_olRmbOwned = true;
+    return true;
+}
+
 void wxNonOwnedWindow::OLMouseMessage(struct IntuiMessage *msg)
 {
     const int x = msg->MouseX - m_olWin->BorderLeft, y = msg->MouseY - m_olWin->BorderTop;
     unsigned qual = msg->Qualifier;
     wxOLLastQualifier = msg->Qualifier;
+    m_olMouseTaken = false;
+    if ( m_olRmbOwned )
+    {
+        // a right press a window took (OLMenuVerify): Intuition may give the
+        // press again, and its release comes as MENUUP, or only shows as the
+        // button gone from the qualifier of what follows
+        if ( msg->Class == IDCMP_MOUSEBUTTONS && msg->Code == MENUDOWN )
+            return;
+        if ( !(msg->Class == IDCMP_MOUSEBUTTONS && msg->Code == MENUUP) && !(qual & IEQUALIFIER_RBUTTON) )
+        {
+            struct IntuiMessage up = *msg;
+            up.Class = IDCMP_MOUSEBUTTONS;
+            up.Code = MENUUP;
+            OLMouseMessage(&up);
+        }
+        if ( msg->Class == IDCMP_MOUSEBUTTONS && msg->Code == MENUUP )
+            m_olRmbOwned = false;
+    }
 
     int what = wxEVT_MOTION, button = 0;
     bool down = false, up = false;
@@ -936,6 +989,7 @@ void wxNonOwnedWindow::OLMouseMessage(struct IntuiMessage *msg)
     }
     wxWindow *const was = target;
     const bool taken = target->OLMouse(what, cx, cy, qual);
+    m_olMouseTaken = taken;
     if ( what == wxEVT_RIGHT_UP && !taken && m_olWin )
     {
         // as Windows does: a right click nobody took asks for a context menu
