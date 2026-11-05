@@ -22,7 +22,6 @@
 
 #include "wx/tooltip.h"
 
-#include "private.h"
 
 namespace
 {
@@ -477,9 +476,9 @@ bool wxToolBar::Realize()
     if ( frame && frame->GetToolBar() == this )
     {
         if ( IsVertical() )
-            SetSize(best.x, -1, wxSIZE_USE_EXISTING);
+            SetSize(wxSize(best.x, GetSize().y));
         else
-            SetSize(-1, best.y, wxSIZE_USE_EXISTING);
+            SetSize(wxSize(GetSize().x, best.y));
         frame->SendSizeEvent();
     }
     else
