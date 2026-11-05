@@ -8,6 +8,14 @@
 #include <wx/string.h>
 #include <cstdio>
 #include <cstring>
+#include <cerrno>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 
 static int g_pass = 0, g_total = 0;
 
@@ -20,11 +28,52 @@ static void Check(bool ok, const char *what)
     fflush(stdout);
 }
 
+// libnix's own calls, without wx: what wx's sockets stand on
+static void RawChecks()
+{
+    int srv = socket(AF_INET, SOCK_STREAM, 0);
+    Check(srv >= 0, "raw: socket");
+    struct sockaddr_in a;
+    memset(&a, 0, sizeof a);
+    a.sin_family = AF_INET;
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    a.sin_port = 0;
+    Check(bind(srv, (struct sockaddr *)&a, sizeof a) == 0, "raw: bind");
+    Check(listen(srv, 4) == 0, "raw: listen");
+    socklen_t len = sizeof a;
+    getsockname(srv, (struct sockaddr *)&a, &len);
+    printf("     raw port %u\n", (unsigned)ntohs(a.sin_port));
+    int cli = socket(AF_INET, SOCK_STREAM, 0);
+    int one = 1;
+    Check(ioctl(cli, FIONBIO, &one) == 0, "raw: ioctl FIONBIO");
+    int rc = connect(cli, (struct sockaddr *)&a, sizeof a);
+    printf("     raw connect rc=%d errno=%d\n", rc, errno);
+    fflush(stdout);
+    fd_set rd;
+    FD_ZERO(&rd);
+    FD_SET(srv, &rd);
+    struct timeval tv = { 3, 0 };
+    rc = select(srv + 1, &rd, NULL, NULL, &tv);
+    Check(rc == 1 && FD_ISSET(srv, &rd), "raw: select sees the connection");
+    printf("     raw select rc=%d errno=%d\n", rc, errno);
+    fflush(stdout);
+    if ( rc == 1 )
+    {
+        int peer = accept(srv, NULL, NULL);
+        Check(peer >= 0, "raw: accept");
+        if ( peer >= 0 )
+            close(peer);
+    }
+    close(cli);
+    close(srv);
+}
+
 int main(int argc, char **argv)
 {
     wxInitializer init(argc, argv);
     Check(init.IsOk(), "wx initialised");
     Check(wxSocketBase::Initialize(), "wxSocketBase::Initialize (bsdsocket.library open)");
+    RawChecks();
 
     wxIPV4address any;
     Check(any.Hostname("127.0.0.1"), "address 127.0.0.1");
@@ -43,13 +92,18 @@ int main(int argc, char **argv)
     const unsigned short port = bound.Service();
     Check(port != 0, "server has a port");
     printf("     port %u\n", port);
+    fflush(stdout);
+    server.SetTimeout(5);
 
     // the client connects without waiting; the server accepts
     wxIPV4address to;
     to.Hostname("127.0.0.1");
     to.Service(port);
     wxSocketClient client(wxSOCKET_NONE);
+    client.SetTimeout(5);
     client.Connect(to, false);
+    printf("     connecting\n");
+    fflush(stdout);
     wxSocketBase *peer = server.Accept(true);
     Check(peer != NULL, "server accepts");
     Check(client.WaitOnConnect(5, 0) && client.IsConnected(), "client connects");
@@ -63,6 +117,7 @@ int main(int argc, char **argv)
     Check(!client.Error() && client.LastCount() == sizeof out, "client writes 4096 bytes");
     if ( peer )
     {
+        peer->SetTimeout(5);
         peer->SetFlags(wxSOCKET_WAITALL);
         memset(in, 0, sizeof in);
         peer->Read(in, sizeof in);
@@ -91,6 +146,7 @@ int main(int argc, char **argv)
     u1.AnyAddress();
     u1.Service(0);
     wxDatagramSocket udp(u1, wxSOCKET_NONE);
+    udp.SetTimeout(5);
     Check(udp.IsOk(), "datagram socket");
     wxIPV4address uLocal;
     udp.GetLocal(uLocal);
