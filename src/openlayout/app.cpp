@@ -151,6 +151,27 @@ static bool HandleOneMessage()
         }
     }
 
+    if ( m->Class == IDCMP_MENUVERIFY )
+    {
+        // the right button in the active window (MENUHOT): wx is asked before
+        // the menus open, and the answer goes back in the reply
+        if ( m->Code == MENUHOT )
+        {
+            for ( size_t i = 0; i < wxOLOpenWindowCount(); i++ )
+            {
+                wxNonOwnedWindow *w = wxOLOpenWindow(i);
+                if ( w->OLGetWindow() == m->IDCMPWindow )
+                {
+                    if ( w->OLMenuVerify(m) )
+                        m->Code = MENUCANCEL;
+                    break;
+                }
+            }
+        }
+        ReplyMsg(&m->ExecMessage);
+        return true;
+    }
+
     struct IntuiMessage copy = *m;
     ULONG prev = 0;
     if ( m->Class == IDCMP_RAWKEY && m->IAddress )
