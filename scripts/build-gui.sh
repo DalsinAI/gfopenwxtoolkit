@@ -27,12 +27,12 @@ if [ "$(cat "$T/.toolkit" 2>/dev/null)" != "$SUM" ]; then
     echo "$SUM" > "$T/.toolkit"
 fi
 
-# the sources: wx's common GUI code, the generic picks, the port, PNG and JPEG
+# the sources: wx's common GUI code, HTML and XRC, the generic picks, the port, PNG and JPEG
 python3 - "$T/build/files" "$HERE/config/gui-sources.txt" > "$G/sources.txt" <<'PY'
 import re, sys
 files = open(sys.argv[1]).read()
 out = []
-for name in ("BASE_AND_GUI_CMN_SRC", "GUI_CMN_SRC", "HTML_CMN_SRC"):
+for name in ("BASE_AND_GUI_CMN_SRC", "GUI_CMN_SRC", "HTML_CMN_SRC", "XRC_SRC"):
     m = re.search(r'^' + name + r' =\n((?:[ \t]+.*\n)+)', files, re.M)
     for line in m.group(1).splitlines():
         line = line.split('#', 1)[0]
