@@ -381,6 +381,13 @@ wxPoint wxGetMousePosition()
     return wxPoint(x, y);
 }
 
+// the window under the pointer (wx's context help asks for it)
+wxWindow *wxFindWindowAtPointer(wxPoint& pt)
+{
+    pt = wxGetMousePosition();
+    return wxFindWindowAtPoint(pt);
+}
+
 // the qualifiers of the last input event the windows had (the event loop
 // keeps them), for key state and mouse state
 unsigned short wxOLLastQualifier = 0;
