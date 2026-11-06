@@ -64,6 +64,19 @@ for v in baserel os o2; do
     figures "$v" "$W"; echo "$SHA" > "$F/$v/.done"
     cat "$F/$v/sizes.txt"
 done
+# (temporary) wctest and basetest again with a trace of how far their start gets
+BW="$C/library-build-os-baserel"
+if [ -f "$BW/library/wctest.o" ]; then
+    m68k-amigaos-gcc -noixemul -m68040 -Os -ffixed-a4 -c "$HERE/shlib/trace/inittrace.c" -o "$BW/library/inittrace.o"
+    for t in wctest basetest; do
+        # shellcheck disable=SC2046
+        WXTK_SHARED=1 m68k-amigaos-g++ -noixemul -m68040 -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUTD/lab/$t-tr" \
+            "$BW/library/inittrace.o" "$BW/library/$t.o" $(WXTK_SHARED=1 "$BW/out/sdk/bin/wx-config" --libs std) -Wl,-Map,"$OUTD/lab/$t-tr.map" \
+            && echo "$t-tr linked"
+    done
+    m68k-amigaos-objdump -h "$OUTD/lab/wctest-tr" 2>&1 | head -20
+    grep -n -i -e '__INIT_LIST__' -e '__CTOR_LIST__' -e 'ctors' "$OUTD/lab/wctest-tr.map" | head -20
+fi
 # the lab's timer: runs a command N times, E-clock ms each
 m68k-amigaos-gcc -noixemul -m68040 -Os -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$F/wxtime" "$HERE/tests/amiga/wxtime.c" \
     && echo "wxtime built"
