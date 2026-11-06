@@ -47,7 +47,13 @@ for v in baserel os o2; do
     echo "$v: building in $W ($left s left)"
     # shellcheck disable=SC2086
     # a modest -j: KiCad builds on the same machine
+    if [ "$v" = baserel ] && [ -f "$W/out/xrcstart" ] && [ -f "$W/out/sdk/bin/wx-config" ]; then
+        # wx is built: only the library, its module and the programs on it
+        # (its steps go on where a run cut short stopped)
+        env $env WORK="$W" OUT="$W/out" TOOLCHAIN="$STOVE/prefix" nice -n 19 timeout "$left" sh "$HERE/scripts/build-library.sh" > "$OUTD/build-$v.log" 2>&1
+    else
     env $env JOBS=6 WORK="$W" OUT="$W/out" nice -n 19 timeout "$left" sh "$HERE/build-amiga.sh" > "$OUTD/build-$v.log" 2>&1
+    fi
     rc=$?
     echo "$v: exit $rc; gui objects $(ls "$W/gui/obj" 2>/dev/null | grep -c '\.o$')"
     grep -v -e 'warning' -e '^ *|' -e '^ *[0-9]* |' -e 'In file included' -e '^ *from ' "$OUTD/build-$v.log" | cut -c1-300 | tail -n 25

@@ -21,10 +21,9 @@ if m68k-amigaos-gcc -fno-late-combine-instructions -S -o /dev/null -x c /dev/nul
 case "${WXTK_OPT:-Os}" in O2) OPT="-O2" ;; *) OPT="-Os" ;; esac
 CF="-noixemul -m68040 $OPT $LATE -fno-delete-null-pointer-checks"
 G="$WORK/gui"; BL="$WORK/base/lib"; L="$WORK/library"; R=3.2
-rm -rf "$L"; mkdir -p "$L" "$OUT/Libs/openwxtoolkit"
+mkdir -p "$OUT/Libs/openwxtoolkit"
 
-# the module's start and end, and the calls it keeps for itself
-m68k-amigaos-gcc $CF -specs="$SPECS" -fbaserel32 -Wall -c "$HERE/src/library/wxtk_module_rt.c" -o "$L/wxtk_module_rt.o"
+# the module's start and end, and the calls it keeps for itself (built below)
 
 # the module's members, in the order a static link takes them
 if [ -n "${WXTK_ARCHIVES:-}" ]; then
@@ -35,8 +34,18 @@ else
     for l in libwxpng.a libwxjpeg.a libwxscintilla.a; do [ -f "$G/$l" ] && ARCH="$ARCH $G/$l"; done
     for l in wxregexu wxzlib wxexpat; do ARCH="$ARCH $BL/lib$l-$R-m68k-amigaos.a"; done
 fi
+# The steps are kept in $L and run again only when what goes into them
+# changes (the archives, these scripts, the runtime): the whole wx module's
+# links take long, so a run cut short goes on where it stopped.
 # shellcheck disable=SC2086
-python3 "$HERE/scripts/wxtk-gen.py" scan "$L" $ARCH
+KEY=$( (ls -l --time-style=+%s $ARCH; cat "$0" "$HERE/scripts/wxtk-gen.py" "$HERE/src/library/"*; echo "$CF ${WXTK_ARCHIVES:-}") | sha256sum | cut -c1-16)
+if [ "$(cat "$L/.key" 2>/dev/null)" != "$KEY" ]; then rm -rf "$L"; fi
+mkdir -p "$L"; echo "$KEY" > "$L/.key"
+done_() { [ -f "$L/.done-$1" ]; }
+mark() { : > "$L/.done-$1"; }
+m68k-amigaos-gcc $CF -specs="$SPECS" -fbaserel32 -Wall -c "$HERE/src/library/wxtk_module_rt.c" -o "$L/wxtk_module_rt.o"
+# shellcheck disable=SC2086
+done_ scan || { python3 "$HERE/scripts/wxtk-gen.py" scan "$L" $ARCH && mark scan; }
 
 # the module, linked -resident32: the members, the whole C++ runtime (a
 # program on the library has none of its own; libstdc++ holds libsupc++), libgcc; the C library is the
@@ -48,17 +57,22 @@ modlink() {   # output, first objects...
         -Wl,--whole-archive -lstdc++ -Wl,--no-whole-archive -lgcc \
         -Wl,--wrap=pthread_create,--wrap=pthread_once,--wrap=pthread_key_create -Wl,--no-demangle
 }
+if ! done_ mod1; then
 modlink "$L/mod1" -Wl,--noinhibit-exec > "$L/mod1.log" 2>&1 || true
 [ -f "$L/mod1" ] || { tail -n 40 "$L/mod1.log" >&2; echo "build-library: the module's first link failed" >&2; exit 1; }
 m68k-amigaos-objdump -t "$L/mod1" > "$L/mod1.t"
+mark mod1
+fi
+echo "build-library: first link done $(date +%T)"
 # (whole names: the hunk file's symbol table cuts long ones short)
 for a in libstdc++.a libgcc.a; do
     m68k-amigaos-g++ -noixemul -m68040 -fbaserel32 -print-file-name=$a
 done > "$L/rtarch.txt"
 # shellcheck disable=SC2046
-m68k-amigaos-nm -g --defined-only "$L/wxtk_module_rt.o" $(cat "$L/members.rsp" "$L/rtarch.txt") 2>/dev/null \
+done_ names || m68k-amigaos-nm -g --defined-only "$L/wxtk_module_rt.o" $(cat "$L/members.rsp" "$L/rtarch.txt") 2>/dev/null \
     | grep -v ':$' > "$L/names.txt" || true
-python3 "$HERE/scripts/wxtk-gen.py" link "$L" "$L/mod1.t" "$L/mod1.log" "$L/names.txt"
+mark names
+done_ link || { python3 "$HERE/scripts/wxtk-gen.py" link "$L" "$L/mod1.t" "$L/mod1.log" "$L/names.txt" && mark link; }
 
 # which of those C library symbols are code and which data: a program that
 # names them all, as a program on the library is linked. First to learn
@@ -83,8 +97,12 @@ python3 "$HERE/scripts/wxtk-gen.py" emit "$L" "$L/rtprobe.t"
 
 # the module for real: its tables first
 m68k-amigaos-as -m68040 "$L/mod_tables.s" -o "$L/mod_tables.o"
+if ! done_ mod2; then
 modlink "$L/wx.module.debug" "$L/mod_tables.o" -Wl,-Map,"$L/wx.module.map" > "$L/mod2.log" 2>&1 || {
     grep -v 'duplicate section' "$L/mod2.log" | tail -n 60 >&2; echo "build-library: the module didn't link" >&2; exit 1; }
+mark mod2
+fi
+echo "build-library: second link done $(date +%T)"
 und=$(m68k-amigaos-nm -u "$L/wx.module.debug" || true)
 [ -z "$und" ] || { echo "build-library: undefined in wx.module: $und" >&2; exit 1; }
 # (strip can't write a -resident32 file's data back: the linker strips it)
