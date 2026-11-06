@@ -12,7 +12,7 @@ WORK=${WORK:-"$HERE/build/libtest"}; OUT=${OUT:-"$WORK/out"}
 SPECS="$HERE/scripts/m68k-soft-m68040.specs"
 T="$HERE/tests/library"; mkdir -p "$WORK/t" "$OUT"
 CXF="-noixemul -m68040 -O2 -std=gnu++17 -specs=$SPECS"
-m68k-amigaos-g++ $CXF -fbaserel32 -c "$T/shapes.cpp" -o "$WORK/t/shapes.o"
+m68k-amigaos-g++ $CXF -fbaserel32 -fdata-sections -c "$T/shapes.cpp" -o "$WORK/t/shapes.o"
 rm -f "$WORK/t/libshapes.a"; m68k-amigaos-ar rcs "$WORK/t/libshapes.a" "$WORK/t/shapes.o"
 WORK="$WORK" OUT="$OUT" WXTK_ARCHIVES="$WORK/t/libshapes.a" sh "$HERE/scripts/build-library.sh"
 L="$WORK/library"

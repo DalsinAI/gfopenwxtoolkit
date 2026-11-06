@@ -4,7 +4,8 @@ the wx module (src/library/wxtoolkit_library.h). scripts/build-library.sh
 runs it in these steps:
 
   wxtk-gen.py scan OUTDIR ARCHIVE...
-      unpacks the toolkit's archives (built -fbaserel32, in link order) and
+      unpacks the toolkit's archives (built -fbaserel32 -fdata-sections, so
+      each variable's section says whether it is a constant, in link order) and
       picks the members the module is linked from: a member whose own
       symbols an earlier archive already gives is left out, as a static link
       would never take it (the GUI build's copies of wxBase files win).
@@ -112,8 +113,11 @@ def member_info(m, arch):
             continue
         ro = sec.startswith(ROSECS) or bool(TYPEDATA.match(name))
         code = sec.startswith(".text") and not TYPEDATA.match(name)
-        if sec not in ("*COM*", ".text", ".data", ".bss", ".rodata"):
-            linkonce.add(name)                  # an inline function's or template's own section
+        # an inline function's or template's own section (weak); a variable's
+        # own section from -fdata-sections is not one
+        if sec not in ("*COM*", ".text", ".data", ".bss", ".rodata") and \
+                ("w" in flags or sec.startswith(".text.")):
+            linkonce.add(name)
         defs[name] = {"code": code, "ro": ro, "weak": "w" in flags and "g" not in flags}
     return {"path": m, "arch": arch, "defs": defs, "undef": sorted(undef), "linkonce": sorted(linkonce)}
 
