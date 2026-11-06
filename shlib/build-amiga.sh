@@ -76,6 +76,12 @@ if [ -f "$BW/library/wctest.o" ]; then
             && echo "$t-tr linked"
     done
     m68k-amigaos-objdump -h "$OUTD/lab/wctest-tr" 2>&1 | head -20
+    echo "== init priorities of the C library parts"
+    for a in libnix.a libnix20.a libsocket.a libpthread.a; do
+        p=$(m68k-amigaos-gcc -noixemul -m68040 -print-file-name=$a)
+        m68k-amigaos-objdump -s -j .list___INIT_LIST__ -j .list___EXIT_LIST__ "$p" 2>/dev/null \
+            | grep -e 'file format' -e '^ 0000' -e 'Contents of' | grep -B2 '^ 0000' | grep -v '^--' | cut -c1-90
+    done 2>&1 | head -120
     echo "== wctest-tr's set lists"
     awk '/^ ?\.list___(CTOR|INIT|EXIT|DTOR)_LIST__/{p=1;print;next} p&&/^ ?\.[a-z]/{p=0} p' "$OUTD/lab/wctest-tr.map" | cut -c1-160 | head -150
 fi
