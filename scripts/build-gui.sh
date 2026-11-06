@@ -123,7 +123,7 @@ M="$G/Makefile"
 L="$WORK/base/lib"
 LIBS="$G/libwx_openlayoutu_core.a $OLUI_LIB $L/libwx_baseu-3.2-m68k-amigaos.a $G/libwxscintilla.a $L/libwxregexu-3.2-m68k-amigaos.a $L/libwxzlib-3.2-m68k-amigaos.a $L/libwxexpat-3.2-m68k-amigaos.a"
 m68k-amigaos-g++ $CXXF -c "$T/samples/minimal/minimal.cpp" -I"$T/samples" -o "$G/obj/minimal.o"
-m68k-amigaos-g++ -noixemul -m68040 -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUT/minimal" "$G/obj/minimal.o" "$WORK/base/wxamiga_crt.o" "$WORK/base/wxamiga_stubs.o" \
+m68k-amigaos-g++ -noixemul -m68040 $BASEREL -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUT/minimal" "$G/obj/minimal.o" "$WORK/base/wxamiga_crt.o" "$WORK/base/wxamiga_stubs.o" \
     -Wl,--start-group $LIBS -Wl,--end-group -lsocket -lpthread -latomic -lm -lamiga
 ls -l "$OUT/minimal"
 
@@ -150,7 +150,7 @@ W="$SDK/bin/wx-config"
 # shellcheck disable=SC2046
 m68k-amigaos-g++ -noixemul -m68040 -O2 -std=gnu++17 $("$W" --cxxflags) -c "$T/samples/minimal/minimal.cpp" -I"$T/samples" -o "$G/obj/minimal-sdk.o"
 # shellcheck disable=SC2046
-m68k-amigaos-g++ -noixemul -m68040 -specs="$HERE/scripts/m68k-soft-m68040.specs" -o "$G/minimal-sdk" "$G/obj/minimal-sdk.o" $("$W" --libs core,base,html,adv,qa,xml,net)
+m68k-amigaos-g++ -noixemul -m68040 $BASEREL -specs="$HERE/scripts/m68k-soft-m68040.specs" -o "$G/minimal-sdk" "$G/obj/minimal-sdk.o" $("$W" --libs core,base,html,adv,qa,xml,net)
 ls -l "$G/minimal-sdk"
 # the port's own GUI tests, built the same way
 for t in "$HERE"/tests/gui/*.cpp; do
@@ -159,6 +159,6 @@ for t in "$HERE"/tests/gui/*.cpp; do
     # shellcheck disable=SC2046
     m68k-amigaos-g++ -noixemul -m68040 -O2 -std=gnu++17 $("$W" --cxxflags) -c "$t" -o "$G/obj/test-$n.o"
     # shellcheck disable=SC2046
-    m68k-amigaos-g++ -noixemul -m68040 -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUT/$n" "$G/obj/test-$n.o" $("$W" --libs core,base)
+    m68k-amigaos-g++ -noixemul -m68040 $BASEREL -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUT/$n" "$G/obj/test-$n.o" $("$W" --libs core,base)
 done
 du -sh "$SDK"
