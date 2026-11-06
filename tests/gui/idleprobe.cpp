@@ -35,10 +35,11 @@ public:
             delete o;
             if ( __wxtk_app && ev )
             {
-                const unsigned char *copy = (const unsigned char *)__wxtk_app[19];
-                const unsigned long *mh = (const unsigned long *)__wxtk_app[20];
+                const unsigned char *copy = (const unsigned char *)__wxtk_app[18];
+                const unsigned long *mh = (const unsigned long *)__wxtk_app[19];
                 printf("idleprobe: copy %p, a4_init %p, data_size %lu, program's offset %lx\n", (const void *)copy,
                        (void *)mh[5], mh[6], (unsigned long)((const unsigned char *)&wxEVT_IDLE - copy));
+                fflush(stdout);
                 int n = 0;
                 for ( unsigned long k = 0; k + 4 <= mh[6] && n < 8; k += 2 )
                     if ( *(const long *)(copy + k) == g_idleType )
