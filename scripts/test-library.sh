@@ -21,6 +21,6 @@ m68k-amigaos-g++ $CXF -o "$OUT/shapetest" "$WORK/t/main.o" "$L/wxtoolkit-tables.
     -Wl,-Map,"$WORK/t/shapetest.map" -lpthread -latomic -lm -lamiga
 m68k-amigaos-g++ $CXF -c "$T/shapes.cpp" -o "$WORK/t/shapes-static.o"
 m68k-amigaos-g++ $CXF -c "$T/main.cpp" -o "$WORK/t/main-static.o"
-m68k-amigaos-g++ $CXF -o "$OUT/shapetest-static" "$WORK/t/main-static.o" "$WORK/t/shapes-static.o"
+m68k-amigaos-g++ $CXF -o "$OUT/shapetest-static" "$WORK/t/main-static.o" "$WORK/t/shapes-static.o" -lpthread -latomic -lm -lamiga
 m68k-amigaos-strip "$OUT/shapetest" "$OUT/shapetest-static"
 ls -l "$OUT/shapetest" "$OUT/shapetest-static" "$OUT/Libs/openwxtoolkit.library" "$OUT/Libs/openwxtoolkit/wx.module"
