@@ -139,4 +139,14 @@ m68k-amigaos-g++ -noixemul -m68040 -O2 -std=gnu++17 $("$W" --cxxflags) -c "$T/sa
 # shellcheck disable=SC2046
 m68k-amigaos-g++ -noixemul -m68040 -specs="$HERE/scripts/m68k-soft-m68040.specs" -o "$G/minimal-sdk" "$G/obj/minimal-sdk.o" $("$W" --libs core,base,html,adv,qa,xml,net)
 ls -l "$G/minimal-sdk"
+# the port's own GUI tests, built the same way
+for t in "$HERE"/tests/gui/*.cpp; do
+    [ -f "$t" ] || continue
+    n=$(basename "$t" .cpp)
+    # shellcheck disable=SC2046
+    m68k-amigaos-g++ -noixemul -m68040 -O2 -std=gnu++17 $("$W" --cxxflags) -c "$t" -o "$G/obj/test-$n.o"
+    # shellcheck disable=SC2046
+    m68k-amigaos-g++ -noixemul -m68040 -specs="$HERE/scripts/m68k-soft-m68040.specs" -o "$OUT/$n" "$G/obj/test-$n.o" $("$W" --libs core,base)
+    m68k-amigaos-strip "$OUT/$n"
+done
 du -sh "$SDK"
