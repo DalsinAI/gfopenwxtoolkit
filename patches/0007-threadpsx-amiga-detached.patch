@@ -1,0 +1,38 @@
+--- a/src/unix/threadpsx.cpp	2026-11-06 07:27:37.687775676 +0000
++++ b/src/unix/threadpsx.cpp	2026-11-06 07:27:37.715515557 +0000
+@@ -1140,11 +1140,21 @@
+     // VZ: assume that this one is always available (it's rather fundamental),
+     //     if this function is ever missing we should try to use
+     //     pthread_detach() instead (after thread creation)
++#ifdef __AMIGA__
++    // AmigaOS's pthread makes only joinable threads (its
++    // pthread_attr_setdetachstate takes only JOINABLE): such a thread is
++    // detached with pthread_detach once it is made
++    bool detachWhenMade = false;
++#endif
+     if ( thread->IsDetached() )
+     {
+         if ( pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) != 0 )
+         {
++#ifdef __AMIGA__
++            detachWhenMade = true;
++#else
+             wxFAIL_MSG(wxT("pthread_attr_setdetachstate(DETACHED) failed"));
++#endif
+         }
+ 
+         // never try to join detached threads
+@@ -1174,6 +1184,13 @@
+     }
+ 
+     m_created = true;
++#ifdef __AMIGA__
++    // it waits for Run() (wxPthreadStart), so it has not ended yet
++    if ( detachWhenMade && pthread_detach(GetId()) != 0 )
++    {
++        wxFAIL_MSG(wxT("pthread_detach() failed"));
++    }
++#endif
+     return wxTHREAD_NO_ERROR;
+ }
+ 

@@ -1,0 +1,39 @@
+--- a/src/common/filefn.cpp	2026-11-06 07:27:37.695449575 +0000
++++ b/src/common/filefn.cpp	2026-11-06 07:27:37.715732409 +0000
+@@ -210,7 +210,11 @@
+ 
+     wxString buf = ::wxGetCwd();
+ 
+-    if ( !wxEndsWithPathSeparator(buf) )
++    if ( !wxEndsWithPathSeparator(buf)
++#ifdef __AMIGA__
++         && !buf.EndsWith(wxT(":"))
++#endif
++       )
+     {
+         buf += wxFILE_SEP_PATH;
+     }
+@@ -253,6 +257,13 @@
+         // Unix like or Windows
+         if (filename[0] == wxT('/'))
+             return true;
++#ifdef __AMIGA__
++        // AmigaOS: a volume or assign (System:CodeBlocks, RAM:T/x) before
++        // any separator makes a path absolute
++        const size_t colon = filename.find(wxT(':'));
++        if (colon != wxString::npos && filename.find(wxT('/')) > colon)
++            return true;
++#endif
+ #ifdef __VMS__
+         if (filename.size() > 1 && (filename[0] == wxT('[') && filename[1] != wxT('.')))
+             return true;
+@@ -386,6 +397,9 @@
+ #ifdef __WINDOWS__
+         if (ch != wxT('\\') && ch != wxT('/'))
+             buf << wxT("\\");
++#elif defined(__AMIGA__)
++        if (ch != wxT('/') && ch != wxT(':'))
++            buf << wxT("/");
+ #else
+         if (ch != wxT('/'))
+             buf << wxT("/");

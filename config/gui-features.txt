@@ -35,6 +35,9 @@ AUI
 XRC PROPGRID RICHTEXT
 # pickers (wx's generic ones), for wxHexEditor (wxFileHistory is already on)
 COLOURPICKERCTRL FILEPICKERCTRL DIRPICKERCTRL
+# the font picker and the busy spinner (wx's generic ones, drawn through the
+# graphics context), for Poedit
+FONTPICKERCTRL ACTIVITYINDICATOR PREFERENCES_EDITOR
 # wx's document/view classes (docview.h is where programs find wxFileHistory)
 DOC_VIEW_ARCHITECTURE
 # book controls on lists, choices and the tool bar; printing on wx's
@@ -48,3 +51,6 @@ STC BITMAPCOMBOBOX TIMEPICKCTRL NANOSVG TREELISTCTRL
 !LIBTIFF
 # off: wx's debug report needs its qa library and a network to send to
 !DEBUGREPORT
+# for wxMaxima: the log window, notifications (wx's generic ones), splines
+# (its brackets) and the SVG file DC
+LOGWINDOW NOTIFICATION_MESSAGE SPLINES SVG

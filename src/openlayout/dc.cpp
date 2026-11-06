@@ -627,7 +627,39 @@ void wxOLDCImpl::DoDrawRectangle(wxCoord x, wxCoord y, wxCoord width, wxCoord he
     int dw = LogicalToDeviceXRel(width), dh = LogicalToDeviceYRel(height);
     if ( dw < 0 ) { dx += dw; dw = -dw; }
     if ( dh < 0 ) { dy += dh; dh = -dh; }
-    if ( BrushFills(m_brush) )
+    const wxBrushStyle bs = m_brush.IsOk() ? m_brush.GetStyle() : wxBRUSHSTYLE_TRANSPARENT;
+    const wxBitmap *stipple = (bs == wxBRUSHSTYLE_STIPPLE || bs == wxBRUSHSTYLE_STIPPLE_MASK_OPAQUE ||
+                               bs == wxBRUSHSTYLE_STIPPLE_MASK) ? m_brush.GetStipple() : NULL;
+    if ( stipple && stipple->IsOk() && stipple->GetWidth() > 0 && stipple->GetHeight() > 0 )
+    {
+        // a pattern brush (Scintilla's fold margin): the bitmap tiled from
+        // the device origin, cut to the rectangle
+        wxBitmap tile = *stipple;
+        if ( tile.GetDepth() == 1 )
+        {
+            // a mono stipple: the text colours, as wx's other ports
+            wxImage img = tile.ConvertToImage();
+            unsigned char *p = img.GetData();
+            const wxColour fg = m_textForegroundColour, bg = m_textBackgroundColour;
+            for ( int i = 0, n = img.GetWidth() * img.GetHeight(); i < n; i++, p += 3 )
+            {
+                const wxColour& c = p[0] < 128 ? fg : bg;
+                p[0] = c.Red(); p[1] = c.Green(); p[2] = c.Blue();
+            }
+            tile = wxBitmap(img);
+        }
+        const int tw = tile.GetWidth(), th = tile.GetHeight();
+        const bool masked = bs == wxBRUSHSTYLE_STIPPLE_MASK && tile.GetMask();
+        for ( int ty = dy - ((dy % th) + th) % th; ty < dy + dh; ty += th )
+            for ( int tx = dx - ((dx % tw) + tw) % tw; tx < dx + dw; tx += tw )
+            {
+                const int x0 = wxMax(tx, dx), y0 = wxMax(ty, dy);
+                const int x1 = wxMin(tx + tw, dx + dw), y1 = wxMin(ty + th, dy + dh);
+                if ( x1 > x0 && y1 > y0 )
+                    OLPutBitmap(tile, x0 - tx, y0 - ty, x1 - x0, y1 - y0, x0, y0, masked);
+            }
+    }
+    else if ( BrushFills(m_brush) )
         OLFill(dx, dy, dw, dh, m_brush.GetColour());
     if ( PenDraws(m_pen) )
     {
