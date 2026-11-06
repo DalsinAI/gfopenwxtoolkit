@@ -38,20 +38,20 @@ fi
 python3 "$HERE/scripts/wxtk-gen.py" scan "$L" $ARCH
 
 # the module, linked -resident32: the members, the whole C++ runtime (a
-# program on the library has none of its own), libgcc; the C library is the
+# program on the library has none of its own; libstdc++ holds libsupc++), libgcc; the C library is the
 # program's. The first link tells what the module takes from it.
 modlink() {   # output, first objects...
     o=$1; shift
     m68k-amigaos-g++ -noixemul -m68040 -fbaserel32 -resident32 -nostartfiles -nostdlib -o "$o" "$@" \
         "$L/wxtk_module_rt.o" @"$L/members.rsp" \
-        -Wl,--whole-archive -lstdc++ -lsupc++ -Wl,--no-whole-archive -lgcc \
+        -Wl,--whole-archive -lstdc++ -Wl,--no-whole-archive -lgcc \
         -Wl,--wrap=pthread_create,--wrap=pthread_once,--wrap=pthread_key_create -Wl,--no-demangle
 }
 modlink "$L/mod1" -Wl,--noinhibit-exec > "$L/mod1.log" 2>&1 || true
 [ -f "$L/mod1" ] || { tail -n 40 "$L/mod1.log" >&2; echo "build-library: the module's first link failed" >&2; exit 1; }
 m68k-amigaos-objdump -t "$L/mod1" > "$L/mod1.t"
 # (whole names: the hunk file's symbol table cuts long ones short)
-for a in libstdc++.a libsupc++.a libgcc.a; do
+for a in libstdc++.a libgcc.a; do
     m68k-amigaos-g++ -noixemul -m68040 -fbaserel32 -print-file-name=$a
 done > "$L/rtarch.txt"
 # shellcheck disable=SC2046
