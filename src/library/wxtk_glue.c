@@ -145,6 +145,8 @@ static void wxtk_say(const char *what, APTR a, APTR b)
 void __register_frame_info(const void *begin, void *ob)
 {
     wxtk_say("openwxtoolkit: program EH frames", (APTR)begin, wxtk_reg_fi);
+    wxtk_say("openwxtoolkit: A4 for the module, stub 0", __wxtk_a4, *(APTR *)(__wxtk_app.code_stubs + 1));
+    wxtk_say("openwxtoolkit: where A4 is kept, stub 0's", &__wxtk_a4, *(APTR *)(__wxtk_app.code_stubs + 1));
     if (wxtk_reg_fi) wxtk_call2(wxtk_reg_fi, (APTR)begin, ob);
     wxtk_say("openwxtoolkit: registered", (APTR)begin, ob);
 }
