@@ -93,6 +93,17 @@ if [ -f "$HERE/shlib/trace/dump.txt" ]; then
     echo "== the dump's addresses"
     python3 "$HERE/shlib/trace/resolve.py" "$HERE/shlib/trace/dump.txt" "$BW/library/wx.module.map" "$OUTD/lab/wctest-tr.map" 2>&1 | head -150
 fi
+echo "== multilibs"; m68k-amigaos-gcc -print-multi-lib
+for fl in "" "-fbaserel32" "-m68040 -fbaserel32" "-noixemul -m68040 -fbaserel32"; do
+    echo "libgcc for '$fl': $(m68k-amigaos-gcc $fl -print-libgcc-file-name) / $(m68k-amigaos-gcc $fl -print-multi-directory)"
+done
+echo "== the module's libgcc and libstdc++ members"
+grep -E 'libgcc|libstdc' "$BW/library/wx.module.map" | grep -oE '/[^ ]*\.a\(' | sort | uniq -c | head
+grep -n -B2 '___register_frame_info$' "$BW/library/wx.module.map" | head
+echo "== where the module's code sets A4 other than from it (the first 40)"
+m68k-amigaos-objdump -d "$BW/library/wx.module.debug" 2>/dev/null | awk '/^[0-9a-f]+ <.*>:$/{fn=$2} /,%a4$|,a4$/ && !/movel %sp@\+,%a4|moveal %sp@\+,%a4/ {print fn, $0}' | head -40
+echo "== ___register_frame_info"
+m68k-amigaos-objdump -d "$BW/library/wx.module.debug" 2>/dev/null | awk '/<___register_frame_info>:$/{p=1} p{print; if (++n>40) exit}'
 # the lab's timer: runs a command N times, E-clock ms each
 m68k-amigaos-gcc -noixemul -m68040 -Os -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$F/wxtime" "$HERE/tests/amiga/wxtime.c" \
     && echo "wxtime built"
