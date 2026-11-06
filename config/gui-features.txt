@@ -35,6 +35,9 @@ AUI
 XRC PROPGRID RICHTEXT
 # pickers (wx's generic ones), for wxHexEditor (wxFileHistory is already on)
 COLOURPICKERCTRL FILEPICKERCTRL DIRPICKERCTRL
+# the font picker and the busy spinner (wx's generic ones, drawn through the
+# graphics context), for Poedit
+FONTPICKERCTRL ACTIVITYINDICATOR
 # wx's document/view classes (docview.h is where programs find wxFileHistory)
 DOC_VIEW_ARCHITECTURE
 # book controls on lists, choices and the tool bar; printing on wx's
