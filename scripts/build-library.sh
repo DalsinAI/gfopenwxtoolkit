@@ -98,6 +98,16 @@ probe() {   # output
     # shellcheck disable=SC2086
     m68k-amigaos-gcc -noixemul -m68040 -specs="$SPECS" -o "$1" "$L/rtmain.o" "$L/rtprobe.o" $RTLIBS -Wl,--no-demangle
 }
+# (first with all the module takes: a run that goes on after this was done
+# once finds rtprobe.s already cut down)
+python3 - "$L/state.json" "$L/rtprobe.s" <<'PY'
+import json, sys
+st = json.load(open(sys.argv[1]))
+with open(sys.argv[2], "w") as f:
+    f.write("\t.text\n\t.globl _wxtk_rtprobe\n_wxtk_rtprobe:\n")
+    for n in st.get("taken", st["imports"]):
+        f.write("\t.long %s\n" % n)
+PY
 probe "$L/rtprobe0" > "$L/rtprobe0.log" 2>&1 || true
 python3 "$HERE/scripts/wxtk-gen.py" absent "$L" "$L/rtprobe0.log"
 probe "$L/rtprobe"
