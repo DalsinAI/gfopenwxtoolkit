@@ -11,7 +11,9 @@ set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$HERE/deps.lock"
 STOVE=${STOVE:-"$HOME/AmiCradle/stoves/os32-gcc16-open6"}
-WORK="${WORK:-$HERE/build}"; OUT="${OUT:-$WORK/out}"; JOBS=${JOBS:-12}
+# the build tree lives outside the checkout: Cradle cleans the checkout
+# (git clean) before each job, so a tree inside it never carries over
+WORK="${WORK:-$HOME/.cache/gfopenwxtoolkit/build}"; OUT="${OUT:-$WORK/out}"; JOBS=${JOBS:-12}
 mkdir -p "$WORK/deps" "$OUT"
 
 # a repository at one commit, fetched once

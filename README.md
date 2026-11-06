@@ -6,6 +6,7 @@ The port is called "openlayout" (`__WXOPENLAYOUT__`). wxWidgets 3.2.12 is fetche
 
 - 68040, soft float: one binary with or without an FPU.
 - Native controls are GFOpenLayout widgets; custom-drawn windows get their wxPaintEvent in GFOpenLayout's double buffer.
+- wxNet: wxSocket on libnix's sockets (bsdsocket.library); the GUI loop waits on sockets and windows together (WaitSelect).
 - Window scroll bars, the mouse wheel (OS 3.2's and NewMouse's), menus from wx's accelerators, wxSound on AHI, fonts through diskfont.library.
 
 ## Building
@@ -14,7 +15,7 @@ The port is called "openlayout" (`__WXOPENLAYOUT__`). wxWidgets 3.2.12 is fetche
 STOVE=~/AmiCradle/stoves/os32-gcc16-open6 OUT=out ./build-amiga.sh
 ```
 
-`out/` gets the wxBase tests (`basetest`, `wctest`), wx's `minimal` sample and `sdk/`: the headers, libraries and `bin/wx-config` a wx program builds with:
+`out/` gets the wxBase tests (`basetest`, `wctest`, `sockettest`), wx's `minimal` sample and `sdk/`: the headers, libraries and `bin/wx-config` a wx program builds with:
 
 ```
 m68k-amigaos-g++ $(sdk/bin/wx-config --cxxflags) -c app.cpp

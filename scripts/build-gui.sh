@@ -95,7 +95,7 @@ L="$WORK/base/lib"
 LIBS="$G/libwx_openlayoutu_core.a $OLUI_LIB $L/libwx_baseu-3.2-m68k-amigaos.a $G/libwxpng.a $G/libwxjpeg.a $L/libwxregexu-3.2-m68k-amigaos.a $L/libwxzlib-3.2-m68k-amigaos.a $L/libwxexpat-3.2-m68k-amigaos.a"
 m68k-amigaos-g++ $CXXF -c "$T/samples/minimal/minimal.cpp" -I"$T/samples" -o "$G/obj/minimal.o"
 m68k-amigaos-g++ -noixemul -m68040 -specs="$HERE/scripts/m68k-soft-m68040.specs" -o "$OUT/minimal" "$G/obj/minimal.o" "$WORK/base/wxamiga_crt.o" "$WORK/base/wxamiga_stubs.o" \
-    -Wl,--start-group $LIBS -Wl,--end-group -lpthread -latomic -lm -lamiga
+    -Wl,--start-group $LIBS -Wl,--end-group -lsocket -lpthread -latomic -lm -lamiga
 m68k-amigaos-strip "$OUT/minimal"
 ls -l "$OUT/minimal"
 

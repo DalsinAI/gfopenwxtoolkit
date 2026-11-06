@@ -24,6 +24,7 @@ Dale chose this route on 4 Nov 2026, over writing all of wx ourselves. It is mea
 - **Mouse and keys** go to olui first. Where olui doesn't take them, `olui_hit` finds the element under the pointer, and the port sends that wxWindow wxMouseEvents (with capture), or sends wxKeyEvents to the window with the focus.
 - **Menu bars** are Intuition menus (GadTools), the Amiga way: right button, screen title bar, Amiga-key shortcuts from wx's accelerators.
 - **Timers and idle**: the event loop `Wait()`s on the windows' ports, a timer.device request for the next wx timer, and the wake signal threads use (`wxWakeUpIdle`). wx idle events run when the queue is empty.
+- **Sockets**: wx's sockets are libnix's (`-lsocket`, bsdsocket.library opened for the main task). When wx watches any, the loop waits with `WaitSelect` on their stack descriptors and the same signal mask, and calls their handlers after (`src/openlayout/sockets.cpp`). Sockets are used from the main task only: bsdsocket.library is opened per task.
 
 ## The DC
 
