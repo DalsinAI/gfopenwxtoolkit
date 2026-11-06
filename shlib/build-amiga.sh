@@ -103,6 +103,10 @@ fi
 # everything the lab needs, as this job's files
 mkdir -p "$OUTD/lab"
 for v in o2 os baserel; do [ -d "$F/$v" ] && cp -a "$F/$v" "$OUTD/lab/"; done
+# (temporary) the static -Os GUI tests, to set the shared ones beside
+mkdir -p "$OUTD/lab/static"
+for f in xrcstart ctorbox imgtest minimal; do [ -f "$C/library-build-os/out/$f" ] && cp "$C/library-build-os/out/$f" "$OUTD/lab/static/"; done
+ls -l "$OUTD/lab/static"
 for f in wxtime regex.library; do [ -f "$F/$f" ] && cp "$F/$f" "$OUTD/lab/"; done
 cat "$F"/*/sizes.txt > "$OUTD/lab/sizes.txt" 2>/dev/null
 if [ -f "$HERE/shlib/trace/dump.txt" ]; then
