@@ -19,6 +19,7 @@ src/generic/imaglist.cpp
 src/generic/listctrl.cpp
 src/generic/mask.cpp
 src/generic/paletteg.cpp
+src/generic/prntdlgg.cpp
 src/generic/regiong.cpp
 src/generic/statusbr.cpp
 src/generic/textmeasure.cpp

@@ -35,6 +35,13 @@ XRC PROPGRID RICHTEXT
 COLOURPICKERCTRL FILEPICKERCTRL DIRPICKERCTRL
 # wx's document/view classes (docview.h is where programs find wxFileHistory)
 DOC_VIEW_ARCHITECTURE
+# the tool bar (the port's own, drawn through the DC) and the book controls
+# on it and on lists and choices; printing on wx's PostScript printer and
+# its generic dialogs, for Code::Blocks
+TOOLBAR LISTBOOK CHOICEBOOK TOOLBOOK
+PRINTING_ARCHITECTURE POSTSCRIPT
+# wx's generic wizard dialog, for Code::Blocks' project wizards
+WIZARDDLG
 # off: wx's own TIFF reader isn't needed (PNG and JPEG are built in, from wx's src/png and src/jpeg)
 !LIBTIFF
 # off: wx's debug report needs its qa library and a network to send to
