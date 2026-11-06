@@ -37,7 +37,9 @@ figures() {   # variant work
 # the library build first: it is the longest
 for v in baserel os o2; do
     # (a variant once built stays: remove its .done to build it again)
-    [ -f "$F/$v/.done" ] && { echo "$v: done already"; continue; }
+    # (the library's programs are linked again every run: the step is quick
+    # once the module is made)
+    [ -f "$F/$v/.done" ] && [ "$v" != baserel ] && { echo "$v: done already"; continue; }
     left=$((830 - ($(date +%s) - START)))
     [ "$left" -gt 60 ] || { echo "out of time before $v"; break; }
     case $v in
