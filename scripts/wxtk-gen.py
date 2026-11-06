@@ -9,10 +9,11 @@ runs it in these steps:
       symbols an earlier archive already gives is left out, as a static link
       would never take it (the GUI build's copies of wxBase files win).
       Writes members.rsp (for the links) and members.json.
-  wxtk-gen.py link OUTDIR MOD1.t MOD1.log
+  wxtk-gen.py link OUTDIR MOD1.t MOD1.log NAMES
       after a first link of the module (the members, the C++ runtime whole,
       no C library): MOD1.t is its symbol table (objdump -t), MOD1.log its
-      linker's complaints (--no-demangle). What it defines is what the
+      linker's complaints (--no-demangle), NAMES the global names its inputs
+      define (nm), whole: a hunk file cuts long names short. What it defines is what the
       module gives; what it lacks is what it takes from a program's C
       library. Writes state.json and rtprobe.s, a table naming each import,
       to link a probe program with.
@@ -163,7 +164,34 @@ def scan(outdir, archives):
 
 # ---- link: what the module gives and takes -----------------------------------------------
 
-def link(outdir, mod_t, mod_log):
+def full_names(path):
+    """the names nm gives, and a lookup from a cut-short name to its whole one"""
+    names = set()
+    for line in open(path, errors="replace"):
+        t = line.split()
+        if len(t) == 3 and t[1] not in "UuwvV":
+            names.add(t[2])
+    return names
+
+
+def link(outdir, mod_t, mod_log, names_txt):
+    whole = full_names(names_txt)
+    bypre = {}
+    for n in whole:
+        if len(n) > 64:
+            bypre.setdefault(n[:64], []).append(n)
+    cut = 0
+
+    def wholename(n):
+        nonlocal cut
+        if n in whole or len(n) <= 64:
+            return n
+        c = [x for x in bypre.get(n[:64], ()) if x.startswith(n)]
+        if len(c) == 1:
+            cut += 1
+            return c[0]
+        return None
+
     chosen = json.load(open(os.path.join(outdir, "members.json")))
     wx = {}
     for mi in chosen:
@@ -181,6 +209,9 @@ def link(outdir, mod_t, mod_log):
     for name, val, flags, sec in syms:
         if sec in ("*UND*", "*ABS*") or "g" not in flags and "w" not in flags or PRIVATE.match(name):
             continue
+        name = wholename(name)
+        if name is None:
+            continue                            # cut short past telling: a program can't name it either way
         d = wx.get(name)
         code = d["code"] if d else (sec == ".text" and not TYPEDATA.match(name))
         ro = (d["ro"] if d else False) or bool(TYPEDATA.match(name)) or sec == ".text"
@@ -192,6 +223,8 @@ def link(outdir, mod_t, mod_log):
                          "size": max(min(size, 1 << 20), 2)}
     missing = undefined_in(mod_log)
     # (ld names them as linked, with C's leading underscore)
+    # what --wrap leaves the module's own calls taking: the C library's own
+    missing = {("_" + n[len("___real_"):]) if n.startswith("___real_") else n for n in missing}
     imports = sorted(n for n in missing if not PRIVATE.match(n))
     for n in imports:
         if n in exports:
@@ -201,8 +234,8 @@ def link(outdir, mod_t, mod_log):
     write_probe(outdir, imports)
     ncode = sum(1 for d in exports.values() if d["kind"] == "code")
     nown = sum(1 for d in exports.values() if d["own"])
-    print("wxtk-gen: the module gives %d (%d calls, %d data, %d of them each program's own) and takes %d"
-          % (len(exports), ncode, len(exports) - ncode, nown, len(imports)))
+    print("wxtk-gen: the module gives %d (%d calls, %d data, %d of them each program's own; %d names made whole) and takes %d"
+          % (len(exports), ncode, len(exports) - ncode, nown, cut, len(imports)))
 
 
 def write_probe(outdir, imports):
@@ -402,8 +435,8 @@ if __name__ == "__main__":
     a = sys.argv
     if len(a) >= 3 and a[1] == "scan":
         scan(a[2], a[3:])
-    elif len(a) == 5 and a[1] == "link":
-        link(a[2], a[3], a[4])
+    elif len(a) == 6 and a[1] == "link":
+        link(a[2], a[3], a[4], a[5])
     elif len(a) == 4 and a[1] == "absent":
         absent(a[2], a[3])
     elif len(a) == 4 and a[1] == "emit":

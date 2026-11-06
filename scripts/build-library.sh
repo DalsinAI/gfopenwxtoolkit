@@ -50,7 +50,14 @@ modlink() {   # output, first objects...
 modlink "$L/mod1" -Wl,--noinhibit-exec > "$L/mod1.log" 2>&1 || true
 [ -f "$L/mod1" ] || { tail -n 40 "$L/mod1.log" >&2; echo "build-library: the module's first link failed" >&2; exit 1; }
 m68k-amigaos-objdump -t "$L/mod1" > "$L/mod1.t"
-python3 "$HERE/scripts/wxtk-gen.py" link "$L" "$L/mod1.t" "$L/mod1.log"
+# (whole names: the hunk file's symbol table cuts long ones short)
+for a in libstdc++.a libsupc++.a libgcc.a; do
+    m68k-amigaos-g++ -noixemul -m68040 -fbaserel32 -print-file-name=$a
+done > "$L/rtarch.txt"
+# shellcheck disable=SC2046
+m68k-amigaos-nm -g --defined-only "$L/wxtk_module_rt.o" $(cat "$L/members.rsp" "$L/rtarch.txt") 2>/dev/null \
+    | grep -v ':$' > "$L/names.txt" || true
+python3 "$HERE/scripts/wxtk-gen.py" link "$L" "$L/mod1.t" "$L/mod1.log" "$L/names.txt"
 
 # which of those C library symbols are code and which data: a program that
 # names them all, as a program on the library is linked. First to learn
