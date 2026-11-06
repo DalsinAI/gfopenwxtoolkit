@@ -103,6 +103,7 @@ fi
 # everything the lab needs, as this job's files
 mkdir -p "$OUTD/lab"
 for v in o2 os baserel; do [ -d "$F/$v" ] && cp -a "$F/$v" "$OUTD/lab/"; done
+echo "== absown"; grep -A3 "wxtk-absown" "$OUTD/build-baserel.log" | cut -c1-600
 # (temporary) how the module gives wx's event types (each program's own?)
 echo "== event types in exports.txt"
 grep -E "wxEVT_(ASYNC_METHOD_CALL|BUTTON|CLOSE_WINDOW|IDLE) " "$BW/library/exports.txt" 2>/dev/null || find "$BW" -name exports.txt
