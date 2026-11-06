@@ -130,6 +130,11 @@ def main():
                 hi = mid
         return starts[lo - 1][1] if lo else None
 
+    from collections import Counter
+    print("wxtk-absown: hunks %s; relocations by (from, to): %s" % (
+        [hex(k) if k else None for k in kinds],
+        dict(Counter((hh, t) for hh in range(nh) for _, t in relocs[hh]))))
+    print("wxtk-absown: %d exports, table at %x, %d of them in the data hunk (%d)" % (nexp, lexpa, len(starts), data))
     shared = set()
     for o, t in relocs[code]:
         if t != data or any(a <= o < b for a, b in skip):
