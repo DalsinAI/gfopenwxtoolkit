@@ -81,19 +81,19 @@ M="$G/Makefile"
         o="obj/$(echo "$s" | sed 's|^src/||; s|/|_|g; s|\.cpp$|.o|')"
         OBJS="$OBJS $o"
         case "$s" in src/stc/*|*/xh_styledtextctrl.cpp) f=STCF ;; *) f=CXXF ;; esac
-        printf '%s: %s\n\tm68k-amigaos-g++ $(%s) -MMD -c %s -o $@\n' "$o" "$T/$s" "$f" "$T/$s"
+        printf '%s: %s\n\tm68k-amigaos-g++ $(%s) -MMD -MT $@ -MF $(@:.o=.d) -c %s -o $@.tmp && mv $@.tmp $@\n' "$o" "$T/$s" "$f" "$T/$s"
     done < "$G/sources.txt"
     SOBJS=""
     for s in $(grep -oE '^wxscintilla_[A-Za-z0-9_]+\.o: \$\(srcdir\)/[^ ]+' "$T/Makefile.in" | sed 's|.*(srcdir)/||'); do
         o="obj/sci_$(basename "$s" .cxx).o"
         SOBJS="$SOBJS $o"
-        printf '%s: %s\n\tm68k-amigaos-g++ $(SCIF) -MMD -c %s -o $@\n' "$o" "$T/$s" "$T/$s"
+        printf '%s: %s\n\tm68k-amigaos-g++ $(SCIF) -MMD -MT $@ -MF $(@:.o=.d) -c %s -o $@.tmp && mv $@.tmp $@\n' "$o" "$T/$s" "$T/$s"
     done
     for s in "$HERE"/src/openlayout/*.cpp; do
         [ -f "$s" ] || continue
         o="obj/ol_$(basename "$s" .cpp).o"
         OBJS="$OBJS $o"
-        printf '%s: %s\n\tm68k-amigaos-g++ $(CXXF) -MMD -c %s -o $@\n' "$o" "$s" "$s"
+        printf '%s: %s\n\tm68k-amigaos-g++ $(CXXF) -MMD -MT $@ -MF $(@:.o=.d) -c %s -o $@.tmp && mv $@.tmp $@\n' "$o" "$s" "$s"
     done
     # the Makefile is a prerequisite, so a file taken out of the lists
     # leaves the archive too
@@ -104,6 +104,15 @@ M="$G/Makefile"
     echo "all: libwx_openlayoutu_core.a libwxscintilla.a"
     echo "-include obj/*.d"
 } > "$M"
+# an object a stopped build left half written (before objects were written
+# to .tmp first) is no object: those go, and are made again
+for o in "$G"/obj/*.o; do
+    [ -f "$o" ] || continue
+    { [ -s "$o" ] && [ -n "$(m68k-amigaos-nm --defined-only "$o" 2>/dev/null)" ]; } || { echo "broken object: $o"; rm -f "$o"; }
+done
+rm -f "$G"/obj/*.tmp
+# (once: markupparser's object from a stopped run, which lacks its symbols)
+[ -f "$G/obj/.clean-1" ] || { rm -f "$G/obj/common_markupparser.o"; touch "$G/obj/.clean-1"; }
 (cd "$G" && nice -n 19 make -k -j"$JOBS" all)
 
 # wx's minimal sample

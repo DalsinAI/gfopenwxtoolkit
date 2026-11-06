@@ -9,6 +9,9 @@
  *   one waits with bsdsocket.library's WaitSelect on the stack's own
  *   descriptors. Descriptors that are not sockets (files, the console)
  *   count as ready, as a file is to select() on Unix.
+ * - wxAmigaExePath: the running program's full path (its drawer from
+ *   GetProgramDir, its name from GetProgramName), for wxStandardPaths'
+ *   GetExecutablePath, where Linux reads /proc/self/exe.
  *
  * Copyright (c) 2026 AmiCradle Team
  */
@@ -20,6 +23,7 @@
 #include <sys/select.h>
 #include <exec/types.h>
 #include <proto/bsdsocket.h>
+#include <proto/dos.h>
 
 #ifndef __stdargs
 #define __stdargs
@@ -27,6 +31,15 @@
 
 void *getpwnam(const char *name) { (void)name; return NULL; }
 void *getpwuid(int uid) { (void)uid; return NULL; }
+
+int wxAmigaExePath(char *buf, long len)
+{
+    char name[256];
+    BPTR dir = GetProgramDir();
+    if (!dir || !GetProgramName((STRPTR)name, sizeof name) || !NameFromLock(dir, (STRPTR)buf, len))
+        return 0;
+    return AddPart((STRPTR)buf, FilePart((STRPTR)name), len) ? 1 : 0;
+}
 
 /* libnix's socket library opens it for the main task */
 extern struct Library *SocketBase;

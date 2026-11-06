@@ -1,0 +1,34 @@
+--- a/src/unix/stdpaths.cpp	2026-11-06 07:27:37.702800995 +0000
++++ b/src/unix/stdpaths.cpp	2026-11-06 07:27:37.715845073 +0000
+@@ -137,8 +137,18 @@
+ // wxStandardPaths implementation for Unix
+ // ============================================================================
+ 
++#ifdef __AMIGA__
++extern "C" int wxAmigaExePath(char *buf, long len);   // src/amiga/wxamiga_stubs.c
++#endif
++
+ wxString wxStandardPaths::GetExecutablePath() const
+ {
++#ifdef __AMIGA__
++    // the program's drawer and name from dos.library (System:CodeBlocks/codeblocks)
++    char exe[1024];
++    if ( wxAmigaExePath(exe, sizeof exe) )
++        return wxString(exe, wxConvLibc);
++#endif
+ #ifdef __LINUX__
+     wxString exeStr;
+ 
+@@ -183,6 +193,12 @@
+         size_t pos = exeStr.rfind(wxT("/bin/"));
+         if ( pos != wxString::npos )
+             m_prefix.assign(exeStr, 0, pos);
++#ifdef __AMIGA__
++        // a program in its own drawer (System:CodeBlocks/codeblocks): the
++        // drawer is the prefix, so its data is in <drawer>/share/<app>
++        else if ( (pos = exeStr.find_last_of(wxT("/:"))) != wxString::npos )
++            m_prefix.assign(exeStr, 0, exeStr[pos] == wxT(':') ? pos + 1 : pos);
++#endif
+     }
+ 
+     if ( m_prefix.empty() )

@@ -199,10 +199,34 @@ void wxWindowOpenLayout::OLPlace()
             decls += wxString::Format(";background-color:#%02x%02x%02x", c.Red(), c.Green(), c.Blue());
         }
     }
-    else if ( m_hasFgCol )
+    else
     {
-        const wxColour c = GetForegroundColour();
-        decls += wxString::Format(";color:#%02x%02x%02x", c.Red(), c.Green(), c.Blue());
+        if ( m_hasFgCol )
+        {
+            const wxColour c = GetForegroundColour();
+            decls += wxString::Format(";color:#%02x%02x%02x", c.Red(), c.Green(), c.Blue());
+        }
+        // a font given with SetFont: olui draws the control's text at its
+        // size, bold and fixed width as asked (the theme's own faces)
+        if ( m_hasFont && m_font.IsOk() )
+        {
+            struct TextFont *tf = m_font.GetTextFont();
+            if ( tf )
+                decls += wxString::Format(";font-size:%dpx", (int)tf->tf_YSize);
+            // a named face first (olui opens it through diskfont), then the
+            // theme's fixed face for a fixed one
+            const wxFontFamily fam = m_font.GetFamily();
+            const bool fixed = m_font.IsFixedWidth() || fam == wxFONTFAMILY_MODERN || fam == wxFONTFAMILY_TELETYPE;
+            wxString face = m_font.GetFaceName();
+            face.Replace("\\", "");
+            face.Replace("\"", "");
+            if ( !face.empty() )
+                decls += ";font-family:\"" + face + "\"" + (fixed ? ",monospace" : "");
+            else if ( fixed )
+                decls += ";font-family:monospace";
+            if ( m_font.GetWeight() >= wxFONTWEIGHT_BOLD )
+                decls += ";font-weight:bold";
+        }
     }
     const std::string d = wxOLToUTF8(decls);
     olui_set_style(ui, m_olEl, d.c_str());
@@ -569,7 +593,12 @@ void wxWindowOpenLayout::OLHandleEvent(const struct olui_event& WXUNUSED(ev))
 
 bool wxWindowOpenLayout::SetFont(const wxFont& font)
 {
-    return wxWindowBase::SetFont(font);
+    if ( !wxWindowBase::SetFont(font) )
+        return false;
+    // a control's element takes the font in its style (OLPlace)
+    if ( OLIsNative() )
+        OLPlace();
+    return true;
 }
 
 int wxWindowOpenLayout::GetCharHeight() const
