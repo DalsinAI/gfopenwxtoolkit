@@ -26,7 +26,7 @@ INC=""; [ -n "$NDK" ] && INC="-I$NDK"
 LATE=""
 if m68k-amigaos-gcc -fno-late-combine-instructions -S -o /dev/null -x c /dev/null 2>/dev/null; then LATE="-fno-late-combine-instructions"; fi
 REGEX_SRC=${REGEX_SRC:?a gfopenregex tree (build-amiga.sh fetches it)}
-OXP_SRC=${OXP_SRC:?gfopenxml's oxp/ (build-amiga.sh fetches it)}
+OXP_SRC=${OXP_SRC:?the oxp folder of a gfopenxml tree (build-amiga.sh fetches it)}
 case "${WXTK_OPT:-Os}" in
     O2) OPT="-O2" ;;
     # the size switch: wx's debug checks and their messages go too
@@ -105,11 +105,12 @@ REGEXLIB=$(ls "$B"/lib/libwxregexu-*.a)
 rm -f "$REGEXLIB"; m68k-amigaos-ar rcs "$REGEXLIB" "$B/regex_stub.o"
 
 # wxXmlDocument's parser is OXP, behind the Expat calls it makes: libwxexpat
-# holds the shim and OXP, not Expat
+# holds the shim and OXP, not Expat (plain C: without amigacompat.h)
+CFL=$(echo "$FLAGS" | sed "s| -include [^ ]*||")
 # shellcheck disable=SC2086
-m68k-amigaos-gcc $FLAGS -std=gnu99 -Wall -I"$HERE/src/amiga/expat" -I"$OXP_SRC/include" -c "$HERE/src/amiga/wxexpat_oxp.c" -o "$B/wxexpat_oxp.o"
+m68k-amigaos-gcc $CFL -std=gnu99 -Wall -I"$HERE/src/amiga/expat" -I"$OXP_SRC/include" -c "$HERE/src/amiga/wxexpat_oxp.c" -o "$B/wxexpat_oxp.o"
 # shellcheck disable=SC2086
-m68k-amigaos-gcc $FLAGS -std=gnu99 -fno-delete-null-pointer-checks -I"$OXP_SRC/include" -c "$OXP_SRC/src/oxp.c" -o "$B/oxp.o"
+m68k-amigaos-gcc $CFL -std=gnu99 -fno-delete-null-pointer-checks -I"$OXP_SRC/include" -c "$OXP_SRC/src/oxp.c" -o "$B/oxp.o"
 EXPATLIB=$(ls "$B"/lib/libwxexpat-*.a)
 rm -f "$EXPATLIB"; m68k-amigaos-ar rcs "$EXPATLIB" "$B/wxexpat_oxp.o" "$B/oxp.o"
 

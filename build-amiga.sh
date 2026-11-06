@@ -67,5 +67,8 @@ rm -f "$U/libolui.a"; "$STOVE/prefix/bin/m68k-amigaos-ar" rcs "$U/libolui.a" "$U
 TOOLCHAIN="$STOVE/prefix" WORK="$WORK" OUT="$OUT" JOBS=$JOBS OLUI="$OLUI_SRC/include" OLUI_LIB="$U/libolui.a" \
     sh "$HERE/scripts/build-gui.sh" 2>&1 | grep -v 'duplicate section' | tail -40
 # openwxtoolkit.library, its wx module and the glue programs link with it
-TOOLCHAIN="$STOVE/prefix" WORK="$WORK" OUT="$OUT" sh "$HERE/scripts/build-library.sh"
+# (the module is made of wx built -fbaserel32)
+if [ "${WXTK_BASEREL:-0}" = 1 ]; then
+    TOOLCHAIN="$STOVE/prefix" WORK="$WORK" OUT="$OUT" sh "$HERE/scripts/build-library.sh"
+fi
 ls -l "$OUT"
