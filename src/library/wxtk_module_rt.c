@@ -111,6 +111,7 @@ static void run_atexits(void)
 /* ---- start and end ----------------------------------------------------------------- */
 
 static int started, tracing;
+extern void wxtk_module_start(void);       /* the module's first code (mod_tables.s) */
 
 extern long write(int fd, const void *buf, unsigned long n);
 /* with WXTK_DEBUG set, the module's start says how far it got */
@@ -143,7 +144,7 @@ long wxtk_module_entry(void)
     trace("init list run", 0);
     for (p = p0; *p; p++) {
     }
-    while (p > p0) { --p; trace("constructor", (unsigned long)*p); (*p)(); }
+    while (p > p0) { --p; trace("constructor at", (unsigned long)*p - (unsigned long)wxtk_module_start); (*p)(); }
     trace("started", 0);
     started = 1;
     return 0;
