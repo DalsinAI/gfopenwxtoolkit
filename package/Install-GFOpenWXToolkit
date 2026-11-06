@@ -1,0 +1,83 @@
+; $VER: Install-GFOpenWXToolkit 1.0-rc1 (6.11.2026)
+; The Amiga Installer script for GFOpenWX Toolkit: openwxtoolkit.library and
+; its wx module, which wx programs built shared use, and, if wanted, the tests.
+; Run it from its icon, beside the GFOpenWXToolkit drawer where the archive was unpacked.
+
+(set @app-name "GFOpenWXToolkit")
+(set #version "1.0-rc1")
+(set #drawer "GFOpenWXToolkit")
+
+(onerror
+    (message (cat "GFOpenWX Toolkit was not installed completely." "\n\n" @error-msg
+                  "\n\nFiles already copied stay where they are. Run Install-GFOpenWXToolkit again to finish.")))
+
+; the Installer and the CPU
+(if (< @installer-version 2818051)
+    (abort "GFOpenWX Toolkit needs Installer 43.3 or newer. This one is older: install AmigaOS 3.2 or a newer Installer."))
+(set #cpu (database "cpu"))
+(if (not (or (= #cpu "68040") (= #cpu "68060") (= #cpu "68080")))
+    (abort (cat "GFOpenWX Toolkit is built for a 68040, 68060 or 68080. This Amiga has a " #cpu ".")))
+
+; the package: the drawer beside this script
+(set #source (pathonly (expandpath @icon)))
+(set #from (tackon #source #drawer))
+(if (<> (exists (tackon #from "Libs/openwxtoolkit/wx.module") (noreq)) 1)
+    (abort "The GFOpenWXToolkit drawer is not beside Install-GFOpenWXToolkit. Unpack the whole archive, then run Install-GFOpenWXToolkit from there."))
+
+(welcome (cat "This installs GFOpenWX Toolkit " #version ": openwxtoolkit.library and its wx module, one copy of wxWidgets in memory for every wx program."))
+
+; the library: a newer one already in LIBS: is kept
+(copylib
+    (prompt "Copying openwxtoolkit.library to LIBS:")
+    (help @copylib-help)
+    (source (tackon #from "Libs/openwxtoolkit.library"))
+    (dest "LIBS:")
+    (confirm "expert"))
+(complete 30)
+
+; the wx module goes with the library: always the one from this package,
+; as the library and module are made together
+(if (<> (exists "LIBS:openwxtoolkit" (noreq)) 2) (makedir "LIBS:openwxtoolkit"))
+(copyfiles
+    (prompt "Copying the wx module to LIBS:openwxtoolkit")
+    (help "wx.module holds wxWidgets itself. openwxtoolkit.library loads it once and gives each wx program its own copy of its data.")
+    (source (tackon #from "Libs/openwxtoolkit/wx.module"))
+    (dest "LIBS:openwxtoolkit")
+    (optional "force"))
+(complete 70)
+
+; what the module needs from the system
+(set #missing "")
+(if (<> (exists "LIBS:regex.library" (noreq)) 1) (set #missing (cat #missing "\n  regex.library (GFOpenRegex)")))
+(if (<> (exists "LIBS:z.library" (noreq)) 1) (set #missing (cat #missing "\n  z.library (GFOpenZlib)")))
+(if (<> #missing "")
+    (message (cat "wx programs also need these, which are not in LIBS: yet:" #missing
+                  "\n\nInstall them from their own packages (The Open SDK lists them).")))
+
+; the tests
+(if (askbool
+        (prompt "Copy the tests (basetest, wctest, sockettest, xrcstart, minimal) and the documents too? wx programs don't need them.")
+        (help "They go in a drawer called GFOpenWXToolkit in the drawer you choose next.")
+        (choices "Yes" "No")
+        (default 0))
+    (
+        (set #parent
+            (askdir
+                (prompt "Where should the GFOpenWXToolkit drawer go?")
+                (help "The Installer makes or updates a drawer called GFOpenWXToolkit in the drawer you choose.")
+                (default (if (= (exists "Work:" (noreq)) 2) "Work:" "SYS:"))))
+        (set #dest (tackon #parent #drawer))
+        (if (<> (exists #dest (noreq)) 2) (makedir #dest))
+        (copyfiles
+            (prompt "Copying the tests and documents")
+            (help @copyfiles-help)
+            (source #from)
+            (dest #dest)
+            (pattern "~(Libs)")
+            (optional "force" "askuser"))
+        (set @default-dest #dest)))
+(complete 100)
+(if @pretend
+    (message "Pretend: nothing was copied or changed.")
+    (message (cat "GFOpenWX Toolkit " #version " is installed: openwxtoolkit.library in LIBS: and its module in LIBS:openwxtoolkit.")))
+(exit (quiet))
