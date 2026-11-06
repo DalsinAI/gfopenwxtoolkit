@@ -473,6 +473,15 @@ static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *bas
     }
 
     trace(base, tr, "copy at", (ULONG)copy);
+    if (tr) {
+        trace(base, tr, "entry", (ULONG)mh->entry);
+        trace(base, tr, "entry code", *(ULONG *)mh->entry);
+        for (i = 0; i < mh->nimpc; i++) {
+            APTR f = *(APTR *)IN_COPY(&mh->impc_slot[i]);
+            if (i < 2 || i + 3 > mh->nimpc) { trace(base, tr, "slot", i); trace(base, tr, " fn", (ULONG)f); trace(base, tr, " code", f ? *(ULONG *)f : 0); }
+        }
+        for (i = 0; i < mh->nimpd; i++) trace(base, tr, "variable", *(ULONG *)IN_COPY(mh->impd_place[i]));
+    }
     /* 3. the module's start, on the copy */
     if (call_a4((APTR)mh->entry, copy + WXTK_A4_OFFSET)) { say(app, "openwxtoolkit: the wx module didn't start", 0, 0, -1); goto out; }
     app->copy = copy;
