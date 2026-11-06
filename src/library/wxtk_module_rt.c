@@ -111,6 +111,7 @@ static void run_atexits(void)
 /* ---- start and end ----------------------------------------------------------------- */
 
 static int started, tracing;
+
 extern void wxtk_module_start(void);       /* the module's first code (mod_tables.s) */
 
 extern long write(int fd, const void *buf, unsigned long n);
@@ -128,14 +129,12 @@ static void trace(const char *what, unsigned long n)
     write(1, t, (unsigned long)(d - t));
 }
 
-long wxtk_module_entry(void)
+long wxtk_module_entry(long flags)
 {
     const long *b = _EH_FRAME_BEGINS__ + 1;
     long *o = _EH_FRAME_OBJECTS__ + 1;
     const wxtk_fn *p0 = __CTOR_LIST__ + 1, *p;
-    tracing = 1;    /* TEMPORARY: always, while the start is proved */
-    trace("start", 0);
-    tracing = getenv("WXTK_DEBUG") != NULL || 1;
+    tracing = (int)(flags & 1);
     trace("start, A4", (unsigned long)my_a4());
     while (*b) __register_frame_info((const void *)*b++, (void *)*o++);
     trace("EH frames", (unsigned long)(b - _EH_FRAME_BEGINS__ - 1));

@@ -28,6 +28,7 @@ void say(const std::string &s);         // std::cout
 void sort_longs(long *v, int n);        // qsort with a callback
 long call_back(long (*fn)(long), long x);  // the module calls the program
 extern const char *const shape_names[];
+int count_made();                       // Shape::made, as the module sees it
 
 template <class T> T twice(T x) { return x + x; }
 #endif

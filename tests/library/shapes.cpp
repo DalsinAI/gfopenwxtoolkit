@@ -8,6 +8,7 @@ int Shape::made;
 const char *const shape_names[] = { "rect", "square", 0 };
 static std::string greeting("shapes ready");     // a constructor at start
 
+int count_made() { return Shape::made; }
 Shape::~Shape() {}
 std::string Shape::name() const { return "shape"; }
 long Rect::area() const { return w * h; }

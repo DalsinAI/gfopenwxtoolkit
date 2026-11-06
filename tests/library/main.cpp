@@ -35,7 +35,9 @@ int main()
     check(total_area(all, 3) == 49, "module calls the program's override");
     check(Shape::made == 2, "module data seen by the program");
     Shape::made = 7;
-    check(Shape::made == 7 && std::strcmp(shape_names[1], "square") == 0, "module data written and constants read");
+    check(count_made() == 7, "module data written by the program, seen by the module");
+    std::printf("shape_names %p: %p %p\n", (void *)shape_names, (void *)shape_names[0], (void *)shape_names[1]);
+    check(shape_names[1] && std::strcmp(shape_names[1], "square") == 0, "module constants read");
     check(dynamic_cast<Rect *>(a) != 0 && dynamic_cast<Rect *>(static_cast<Shape *>(&c)) == 0, "typeinfo across");
     bool caught = false;
     try { make_shape("hexagon"); }

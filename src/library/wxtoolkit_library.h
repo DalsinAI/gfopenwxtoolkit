@@ -51,7 +51,8 @@
 /* At the module's first code + 4 (after a BRA.W over it). */
 struct WXTKModuleHeader {
     ULONG magic, format, buildid;
-    LONG (*entry)(void);                /* with A4 on a copy: EH frames, constructors; 0 when it worked */
+    LONG (*entry)(LONG flags);          /* with A4 on a copy: EH frames, constructors; 0 when it worked.
+                                           flags 1: say each step on stdout (WXTK_DEBUG) */
     void (*exit)(void);                 /* with A4 on the copy: atexit list, destructors, EH frames */
     UBYTE *a4_init;                     /* A4 for the data as loaded: its start + WXTK_A4_OFFSET */
     ULONG data_size;                    /* data and BSS together, bytes: each program's copy */

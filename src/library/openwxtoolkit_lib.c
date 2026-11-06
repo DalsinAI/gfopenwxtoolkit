@@ -388,14 +388,15 @@ static void trace(struct WXTKBase *base, int on, const char *what, ULONG n)
     Write(out, t, d - t);
 }
 
-/* fn() with A4 = a4, the caller's A4 back after; the result in D0. */
-static LONG call_a4(APTR fn, APTR a4)
+/* fn(arg) with A4 = a4, the caller's A4 back after; the result in D0. */
+static LONG call_a4(APTR fn, APTR a4, LONG arg)
 {
     register LONG r __asm("d0");
     register APTR f __asm("a1") = fn;
     register APTR v __asm("d1") = a4;
-    __asm volatile ("move.l %%a4,-(%%sp)\n\tmove.l %2,%%a4\n\tjsr (%1)\n\tmove.l (%%sp)+,%%a4"
-                    : "=r"(r), "+r"(f), "+r"(v) : : "a0", "cc", "memory");
+    register LONG x __asm("a0") = arg;
+    __asm volatile ("move.l %%a4,-(%%sp)\n\tmove.l %3,-(%%sp)\n\tmove.l %2,%%a4\n\tjsr (%1)\n\taddq.l #4,%%sp\n\tmove.l (%%sp)+,%%a4"
+                    : "=r"(r), "+r"(f), "+r"(v), "+r"(x) : : "cc", "memory");
     return r;
 }
 
@@ -483,7 +484,7 @@ static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *bas
         for (i = 0; i < mh->nimpd; i++) trace(base, tr, "variable", *(ULONG *)IN_COPY(mh->impd_place[i]));
     }
     /* 3. the module's start, on the copy */
-    if (call_a4((APTR)mh->entry, copy + WXTK_A4_OFFSET)) { say(app, "openwxtoolkit: the wx module didn't start", 0, 0, -1); goto out; }
+    if (call_a4((APTR)mh->entry, copy + WXTK_A4_OFFSET, tr)) { say(app, "openwxtoolkit: the wx module didn't start", 0, 0, -1); goto out; }
     app->copy = copy;
     app->a4 = copy + WXTK_A4_OFFSET;
     app->header = mh;
@@ -535,7 +536,7 @@ out:
     if (to) FreeVec(to);
     if (buf) FreeVec(buf);
     if (rc) {
-        if (app->header) call_a4((APTR)mh->exit, app->a4);
+        if (app->header) call_a4((APTR)mh->exit, app->a4, 0);
         if (copy) FreeMem(copy, mh->data_size);
         app->copy = NULL; app->a4 = NULL; app->header = NULL;
         if (counted) { ObtainSemaphore(&base->lock); base->users--; ReleaseSemaphore(&base->lock); }
@@ -548,7 +549,7 @@ static void WXTK_Unbind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *b
     EXEC(base);
     struct WXTKModuleHeader *mh = app->header;
     if (!mh) return;
-    call_a4((APTR)mh->exit, app->a4);
+    call_a4((APTR)mh->exit, app->a4, 0);
     FreeMem(app->copy, mh->data_size);
     app->copy = NULL; app->a4 = NULL; app->header = NULL;
     ObtainSemaphore(&base->lock);
