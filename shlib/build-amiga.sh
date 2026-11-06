@@ -36,7 +36,8 @@ figures() {   # variant work
 
 # the library build first: it is the longest
 for v in baserel os o2; do
-    [ "$(cat "$F/$v/.done" 2>/dev/null)" = "$SHA" ] && { echo "$v: done already"; continue; }
+    # (a variant once built stays: remove its .done to build it again)
+    [ -f "$F/$v/.done" ] && { echo "$v: done already"; continue; }
     left=$((830 - ($(date +%s) - START)))
     [ "$left" -gt 60 ] || { echo "out of time before $v"; break; }
     case $v in
@@ -64,6 +65,18 @@ done
 # the lab's timer: runs a command N times, E-clock ms each
 m68k-amigaos-gcc -noixemul -m68040 -Os -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$F/wxtime" "$HERE/tests/amiga/wxtime.c" \
     && echo "wxtime built"
+# regex.library for the lab, from the commit deps.lock gives
+RX="$C/library-build-os/deps/gfopenregex"
+if [ -d "$RX" ] && [ ! -f "$F/regex.library" ]; then
+    rm -rf "$C/regex-build"; cp -a "$RX" "$C/regex-build"
+    (cd "$C/regex-build" && STOVE="$STOVE" sh build-amiga.sh > "$C/regex-build.log" 2>&1) \
+        && cp "$C/regex-build/build-amiga/lib/regex.library" "$F/regex.library" || tail -n 20 "$C/regex-build.log"
+fi
+# everything the lab needs, as this job's files
+mkdir -p "$OUTD/lab"
+for v in o2 os baserel; do [ -d "$F/$v" ] && cp -a "$F/$v" "$OUTD/lab/"; done
+for f in wxtime regex.library; do [ -f "$F/$f" ] && cp "$F/$f" "$OUTD/lab/"; done
+cat "$F"/*/sizes.txt > "$OUTD/lab/sizes.txt" 2>/dev/null
 echo "== figures"; ls -l "$F" "$F"/* 2>&1 | head -60
 echo "== the ports' tree"; ls -l "$C/build" "$C/build/out" 2>&1 | head -20
 cat "$F/before/sizes.txt" 2>/dev/null | head -40
