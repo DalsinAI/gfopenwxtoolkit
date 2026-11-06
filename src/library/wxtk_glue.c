@@ -182,8 +182,6 @@ void __wxtk_init(void)
     {
         char v[4];
         wxtk_debug = GetVar((CONST_STRPTR)"WXTK_DEBUG", (STRPTR)v, sizeof v, 0) >= 0;
-        /* (a test: the program's own exception tables left out) */
-        if (GetVar((CONST_STRPTR)"WXTK_NOEH", (STRPTR)v, sizeof v, 0) >= 0) wxtk_reg_fi = wxtk_dereg_fi = NULL;
     }
     wxtk_say("openwxtoolkit: bound, A4", __wxtk_a4, app->a4);
 }

@@ -50,7 +50,7 @@ for v in baserel os o2; do
     case $v in
         o2) env="WXTK_OPT=O2"; W="$C/library-build-o2" ;;
         os) env="WXTK_OPT=Os"; W="$C/library-build-os" ;;
-        baserel) env="WXTK_OPT=Os WXTK_BASEREL=1 WXTK_SLOTCHECK=1"; W="$C/library-build-os-baserel" ;;
+        baserel) env="WXTK_OPT=Os WXTK_BASEREL=1"; W="$C/library-build-os-baserel" ;;
     esac
     echo "$v: building in $W ($left s left)"
     # shellcheck disable=SC2086
