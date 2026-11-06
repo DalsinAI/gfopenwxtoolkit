@@ -76,7 +76,8 @@ if [ -f "$BW/library/wctest.o" ]; then
             && echo "$t-tr linked"
     done
     m68k-amigaos-objdump -h "$OUTD/lab/wctest-tr" 2>&1 | head -20
-    grep -n -i -e '__INIT_LIST__' -e '__CTOR_LIST__' -e 'ctors' "$OUTD/lab/wctest-tr.map" | head -20
+    echo "== wctest-tr's set lists"
+    awk '/^\.list___(CTOR|INIT|EXIT|DTOR)_LIST__/{p=1} p&&/^\.[a-z]/&&!/^\.list___(CTOR|INIT|EXIT|DTOR)_LIST__/{p=0} p' "$OUTD/lab/wctest-tr.map" | cut -c1-160 | head -150
 fi
 # the lab's timer: runs a command N times, E-clock ms each
 m68k-amigaos-gcc -noixemul -m68040 -Os -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$F/wxtime" "$HERE/tests/amiga/wxtime.c" \
