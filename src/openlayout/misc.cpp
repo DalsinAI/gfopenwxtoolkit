@@ -39,6 +39,12 @@
 
 #include "private.h"
 
+// workbench.library, opened only while a document is being opened
+#define __NOLIBBASE__
+#include <proto/wb.h>
+#undef __NOLIBBASE__
+static struct Library *WorkbenchBase;
+
 // ---- cybergraphics ----------------------------------------------------------
 
 struct Library *wxOLCyberGfxBase = NULL;
@@ -223,6 +229,23 @@ void wxOLTextExtent(struct TextFont *tf, unsigned style, const wxString& s, int 
     if ( descent ) *descent = tf->tf_YSize - tf->tf_Baseline - 1;
 }
 
+int wxOLCharWidth(struct TextFont *tf, unsigned style)
+{
+    if ( !tf )
+        tf = wxOLScreenFont();
+    if ( !tf )
+        return 8;
+    struct RastPort rp;
+    InitRastPort(&rp);
+    SetFont(&rp, tf);
+    if ( style )
+        SetSoftStyle(&rp, style, AskSoftStyle(&rp));
+    static const char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const int n = sizeof letters - 1;
+    const int w = TextLength(&rp, (STRPTR)letters, n);
+    return w > 0 ? (w + n / 2) / n : tf->tf_XSize;
+}
+
 // ---- the display ---------------------------------------------------------------
 
 namespace
@@ -381,6 +404,13 @@ wxPoint wxGetMousePosition()
     return wxPoint(x, y);
 }
 
+// the window under the pointer (wx's context help asks for it)
+wxWindow *wxFindWindowAtPointer(wxPoint& pt)
+{
+    pt = wxGetMousePosition();
+    return wxFindWindowAtPoint(pt);
+}
+
 // the qualifiers of the last input event the windows had (the event loop
 // keeps them), for key state and mouse state
 unsigned short wxOLLastQualifier = 0;
@@ -506,4 +536,24 @@ bool wxFontEnumerator::EnumerateEncodings(const wxString& facename)
 {
     // the Amiga's fonts are Latin-1
     return OnFontEncoding(facename, "iso8859-1");
+}
+
+// ----------------------------------------------------------------------------
+// wxLaunchDefaultApplication: Workbench opens the document the way a double
+// click on its icon does (its default tool, or the file type's), with
+// workbench.library 44's OpenWorkbenchObjectA. False when Workbench isn't
+// running or can't open it.
+// ----------------------------------------------------------------------------
+
+bool wxLaunchDefaultApplication(const wxString& document, int WXUNUSED(flags))
+{
+    struct Library *base = OpenLibrary((CONST_STRPTR)"workbench.library", 44);
+    if ( !base )
+        return false;
+    WorkbenchBase = base;
+    const wxCharBuffer name = document.fn_str();
+    const BOOL ok = OpenWorkbenchObjectA((CONST_STRPTR)name.data(), NULL);
+    WorkbenchBase = NULL;
+    CloseLibrary(base);
+    return ok != FALSE;
 }

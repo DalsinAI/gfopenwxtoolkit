@@ -2,7 +2,7 @@
 # wx-config for gfopenwx (wxWidgets on GFOpenLayout UI, AmigaOS 3.x, 68040):
 # what a program's build asks wx's own wx-config, answered for this port's
 # one static configuration (openlayout, unicode, release). The GUI
-# libraries (core, adv, html, aui, xrc, propgrid, richtext, qa, ...) are
+# libraries (core, adv, html, aui, xrc, propgrid, richtext, stc, qa, ...) are
 # all in one library, so any of
 # them gives that one; base, xml and net are wx's own base libraries. The
 # prefix is where this
@@ -75,7 +75,7 @@ if [ "$want_libs" = 1 ]; then
     # (the GUI library holds xrc and richtext, which read XML)
     [ "$gui" = 1 ] && xml=1
     if [ "$gui" = 1 ]; then
-        libs="$libs $L/libwx_openlayoutu_core-$release.a $L/libgfopenlayout_ui.a $L/libwxpng-$release.a $L/libwxjpeg-$release.a"
+        libs="$libs $L/libwx_openlayoutu_core-$release.a $L/libgfopenlayout_ui.a $L/libwxpng-$release.a $L/libwxjpeg-$release.a $L/libwxscintilla-$release.a"
     fi
     [ "$xml" = 1 ] && libs="$libs $L/libwx_baseu_xml-$release.a"
     [ "$net" = 1 ] && libs="$libs $L/libwx_baseu_net-$release.a"

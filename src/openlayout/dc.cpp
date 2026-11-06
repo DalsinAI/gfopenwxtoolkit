@@ -258,10 +258,12 @@ wxCoord wxOLDCImpl::GetCharHeight() const
     return OLFont()->tf_YSize;
 }
 
+static unsigned SoftStyleFor(const wxFont& font, struct TextFont *tf);
+
 wxCoord wxOLDCImpl::GetCharWidth() const
 {
     struct TextFont *tf = OLFont();
-    return tf->tf_XSize;
+    return wxOLCharWidth(tf, SoftStyleFor(m_font, tf));
 }
 
 static unsigned SoftStyleFor(const wxFont& font, struct TextFont *tf)

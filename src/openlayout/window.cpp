@@ -587,7 +587,7 @@ int wxWindowOpenLayout::GetCharWidth() const
     struct TextFont *tf = f.IsOk() ? f.GetTextFont() : NULL;
     if ( !tf )
         tf = wxOLScreenFont();
-    return tf ? tf->tf_XSize : 8;
+    return wxOLCharWidth(tf, 0);
 }
 
 void wxWindowOpenLayout::DoGetTextExtent(const wxString& string, int *x, int *y, int *descent,

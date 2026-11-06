@@ -79,6 +79,9 @@ wxString wxOLStripMnemonics(const wxString& s);
 struct TextFont *wxOLScreenFont();
 // the measure of text in a font (TextLength, the font's height and baseline)
 void wxOLTextExtent(struct TextFont *tf, unsigned style, const wxString& s, int *w, int *h, int *descent);
+// GetCharWidth: the font's average letter advance (tf_XSize is the widest
+// glyph's box, half as wide again as the letters in a scaled or outline font)
+int wxOLCharWidth(struct TextFont *tf, unsigned style);
 
 // the qualifiers of the last input event a window had (the event loop sets them)
 extern unsigned short wxOLLastQualifier;
