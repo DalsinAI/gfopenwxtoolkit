@@ -109,11 +109,13 @@ def main():
     def at(off):
         return struct.unpack_from(">L", buf, cbase + off)[0]
 
-    # the header (wxtk-gen.py emit): bra.w, then longs
-    hdr = [at(2 + 4 * i) for i in range(20)]
+    # the header (wxtk-gen.py emit): bra.w (four bytes), then longs
+    hdr = [at(4 + 4 * i) for i in range(20)]
+    if hdr[0] != 0x5758544B:
+        sys.exit("wxtk-absown: no module header (%08x)" % hdr[0])
     nexp, lexpa, lexpo = hdr[8], hdr[10], hdr[11]
     nimpd, limpdp = hdr[15], hdr[17]
-    skip = [(0, 2 + 4 * 20), (lexpa, lexpa + 4 * nexp), (limpdp, limpdp + 4 * nimpd)]
+    skip = [(0, 4 + 4 * 20), (lexpa, lexpa + 4 * nexp), (limpdp, limpdp + 4 * nimpd)]
     into = {o: t for o, t in relocs[code]}
 
     # the exports in the data hunk: where each starts
