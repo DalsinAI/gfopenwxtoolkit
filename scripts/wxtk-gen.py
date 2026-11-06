@@ -172,8 +172,10 @@ def functions_among(names):
     the code like a function, so the demangled name tells (a function's has
     its parameters); a C name in the code is taken as a function"""
     cxx = [n for n in names if n.startswith("__Z")]
-    out = subprocess.run([CXXFILT], input="\n".join(n[1:] for n in cxx) + "\n",
+    out = subprocess.run([CXXFILT, "-n"], input="\n".join(n[1:] for n in cxx) + "\n",
                          capture_output=True, text=True, check=True).stdout.splitlines()
+    if cxx and all(d == n[1:] for n, d in zip(cxx, out)):
+        sys.exit("wxtk-gen: %s demangles nothing" % CXXFILT)
     return {n for n, d in zip(cxx, out) if "(" in d}
 
 
