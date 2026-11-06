@@ -1,8 +1,9 @@
 /*
  * wxtk_glue.c: a program's start-up for openwxtoolkit.library (linked into
  * every program built with wx-config --libs ... and WXTK_SHARED=1). Before the
- * program's own constructors and EH frames (libnix's init list, priority -6:
- * after its libraries and stdio are open, before both at -5) it opens the
+ * program's own constructors and EH frames (libnix's init list, priority -5,
+ * linked before libnix's own entries at -5, so first among them; the C
+ * library's threads start at -6) it opens the
  * library, which makes this program's copy of the wx module's data, joins
  * the two and runs the module's start (wxtoolkit_library.h); __wxtk_a4 is
  * then A4 for every call into the module. At exit, the module's atexit list
@@ -97,5 +98,5 @@ void __wxtk_init(void)
     if (GetVar((CONST_STRPTR)"WXTK_DEBUG", (STRPTR)wxtk_progname, 4, 0) >= 0 && Output())
         Write(Output(), (APTR)"openwxtoolkit: bound\n", 21);
 }
-ADD2INIT(__wxtk_init, -6);
-ADD2EXIT(__wxtk_exit, -6);
+ADD2INIT(__wxtk_init, -5);
+ADD2EXIT(__wxtk_exit, -5);
