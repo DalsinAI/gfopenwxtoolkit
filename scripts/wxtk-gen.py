@@ -164,6 +164,19 @@ def scan(outdir, archives):
 
 # ---- link: what the module gives and takes -----------------------------------------------
 
+CXXFILT = os.environ.get("CXXFILT", "m68k-amigaos-c++filt")
+
+
+def functions_among(names):
+    """which C++ names are functions: in a hunk file a constant table sits in
+    the code like a function, so the demangled name tells (a function's has
+    its parameters); a C name in the code is taken as a function"""
+    cxx = [n for n in names if n.startswith("__Z")]
+    out = subprocess.run([CXXFILT], input="\n".join(n[1:] for n in cxx) + "\n",
+                         capture_output=True, text=True, check=True).stdout.splitlines()
+    return {n for n, d in zip(cxx, out) if "(" in d}
+
+
 def full_names(path):
     """the names nm gives, and a lookup from a cut-short name to its whole one"""
     names = set()
@@ -206,6 +219,8 @@ def link(outdir, mod_t, mod_log, names_txt):
         v.sort()
     ends = {sec: max(v) + 4 for sec, v in bysec.items()}
     exports = {}
+    textnames = [wholename(n) for n, v, f, sec in syms if sec == ".text" and wholename(n)]
+    funcs = functions_among(textnames)
     for name, val, flags, sec in syms:
         if sec in ("*UND*", "*ABS*") or "g" not in flags and "w" not in flags or PRIVATE.match(name):
             continue
@@ -213,7 +228,10 @@ def link(outdir, mod_t, mod_log, names_txt):
         if name is None:
             continue                            # cut short past telling: a program can't name it either way
         d = wx.get(name)
-        code = d["code"] if d else (sec == ".text" and not TYPEDATA.match(name))
+        if d:       # the member's own section says (.text*, or .rodata/.data.rel.ro for a table)
+            code = d["code"] and not d["ro"]
+        else:       # the C++ runtime's: the demangled name says
+            code = sec == ".text" and not TYPEDATA.match(name) and (name in funcs or not name.startswith("__Z"))
         ro = (d["ro"] if d else False) or bool(TYPEDATA.match(name)) or sec == ".text"
         later = [x for x in bysec[sec] if x > val]
         size = (min(later) if later else ends[sec]) - val
