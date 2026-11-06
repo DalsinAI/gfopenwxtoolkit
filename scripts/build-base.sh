@@ -122,7 +122,6 @@ m68k-amigaos-gcc $FLAGS -Wall -c "$HERE/src/amiga/wxamiga_stubs.c" -o "$B/wxamig
 for t in basetest wctest sockettest ztest; do
     # shellcheck disable=SC2086
     m68k-amigaos-g++ $CXXF -I"$SRC/src/zlib" "$HERE/tests/base/$t.cpp" "$B/wxamiga_crt.o" "$B/wxamiga_stubs.o" -o "$OUT/$t" \
-        -specs="$SPECS" $("$B/wx-config" --libs base,xml,net) -lsocket -lpthread -latomic
-    m68k-amigaos-strip "$OUT/$t"
+        -specs="$SPECS" -s $("$B/wx-config" --libs base,xml,net) -lsocket -lpthread -latomic
 done
 ls -l "$OUT"
