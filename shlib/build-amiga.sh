@@ -80,36 +80,16 @@ if [ -f "$BW/library/wctest.o" ]; then
             "$BW/library/inittrace.o" "$BW/library/$t.o" $(WXTK_SHARED=1 "$BW/out/sdk/bin/wx-config" --libs std) -Wl,-Map,"$OUTD/lab/$t-tr.map" \
             && echo "$t-tr linked"
     done
-    m68k-amigaos-objdump -h "$OUTD/lab/wctest-tr" 2>&1 | head -20
-    echo "== where wctest-tr's __register_frame_info comes from"
-    grep -n -B1 -A2 '_register_frame_info' "$OUTD/lab/wctest-tr.map" | cut -c1-200 | head -30
-    echo "== wctest-tr's set lists"
-    awk '/^ ?\.list___(CTOR|INIT|EXIT|DTOR)_LIST__/{p=1;print;next} p&&/^ ?\.[a-z]/{p=0} p' "$OUTD/lab/wctest-tr.map" | cut -c1-160 | head -150
 fi
 # (temporary) the lab's stack dumper, and what its last dump's addresses are
 m68k-amigaos-gcc -noixemul -m68040 -Os -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUTD/lab/StackDump" "$HERE/shlib/trace/stackdump.c" \
     && echo "StackDump built"
-if [ -f "$HERE/shlib/trace/dump.txt" ]; then
-    echo "== the dump's addresses"
-    python3 "$HERE/shlib/trace/resolve.py" "$HERE/shlib/trace/dump.txt" "$BW/library/wx.module.map" "$OUTD/lab/wctest-tr.map" 2>&1 | head -150
-fi
-echo "== multilibs"; m68k-amigaos-gcc -print-multi-lib
-for fl in "" "-fbaserel32" "-m68040 -fbaserel32" "-noixemul -m68040 -fbaserel32"; do
-    echo "libgcc for '$fl': $(m68k-amigaos-gcc $fl -print-libgcc-file-name) / $(m68k-amigaos-gcc $fl -print-multi-directory)"
-done
-echo "== the module's libgcc and libstdc++ members"
-grep -E 'libgcc|libstdc' "$BW/library/wx.module.map" | grep -oE '/[^ ]*\.a\(' | sort | uniq -c | head
-grep -n -B2 '___register_frame_info$' "$BW/library/wx.module.map" | head
-echo "== where the module's code sets A4 other than from it (the first 40)"
-m68k-amigaos-objdump -d "$BW/library/wx.module.debug" 2>/dev/null | awk '/^[0-9a-f]+ <.*>:$/{fn=$2} /,%a4$|,a4$/ && !/movel %sp@\+,%a4|moveal %sp@\+,%a4/ {print fn, $0}' | head -40
-echo "== ___register_frame_info"
-m68k-amigaos-objdump -d "$BW/library/wx.module.debug" 2>/dev/null | awk '/<___register_frame_info>:$/{p=1} p{print; if (++n>40) exit}'
 # the lab's timer: runs a command N times, E-clock ms each
 m68k-amigaos-gcc -noixemul -m68040 -Os -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$F/wxtime" "$HERE/tests/amiga/wxtime.c" \
     && echo "wxtime built"
 # regex.library for the lab, from the commit deps.lock gives
 RX="$C/library-build-os/deps/gfopenregex"
-if [ -d "$RX" ] && [ ! -f "$F/regex.library" ]; then
+if [ -d "$RX" ] && [ ! -f "$F/regex.library" ] && [ ! -f "$C/regex-build.log" ]; then
     rm -rf "$C/regex-build"; cp -a "$RX" "$C/regex-build"
     (cd "$C/regex-build" && STOVE="$STOVE" sh build-amiga.sh > "$C/regex-build.log" 2>&1) \
         && cp "$C/regex-build/build-amiga/lib/regex.library" "$F/regex.library" || tail -n 20 "$C/regex-build.log"
@@ -119,8 +99,9 @@ mkdir -p "$OUTD/lab"
 for v in o2 os baserel; do [ -d "$F/$v" ] && cp -a "$F/$v" "$OUTD/lab/"; done
 for f in wxtime regex.library; do [ -f "$F/$f" ] && cp "$F/$f" "$OUTD/lab/"; done
 cat "$F"/*/sizes.txt > "$OUTD/lab/sizes.txt" 2>/dev/null
-echo "== figures"; ls -l "$F" "$F"/* 2>&1 | head -60
-echo "== the ports' tree"; ls -l "$C/build" "$C/build/out" 2>&1 | head -20
-cat "$F/before/sizes.txt" 2>/dev/null | head -40
+if [ -f "$HERE/shlib/trace/dump.txt" ]; then
+    echo "== the dump's addresses"
+    python3 "$HERE/shlib/trace/resolve.py" "$HERE/shlib/trace/dump.txt" "$BW/library/wx.module.map" "$OUTD/lab/wctest-tr.map" 2>&1 | head -150
+fi
 : > "$OUTD/exit-0"
 exit 0
