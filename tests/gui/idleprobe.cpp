@@ -11,6 +11,9 @@ static void Say(const char *s, long v = 0)
 }
 
 extern "C" void *__wxtk_a4 __attribute__((weak));
+extern "C" unsigned long __wxtk_app[] __attribute__((weak));
+
+static long g_idleType;
 
 class App : public wxApp
 {
@@ -26,9 +29,22 @@ public:
         {
             wxObject *o = wxCreateDynamicObject("wxIdleEvent");
             wxEvent *ev = wxDynamicCast(o, wxEvent);
+            g_idleType = ev ? (long)ev->GetEventType() : -1L;
             printf("idleprobe: the module's idle event type %ld, next new type %ld\n",
                    ev ? (long)ev->GetEventType() : -1L, (long)wxNewEventType());
             delete o;
+            if ( __wxtk_app && ev )
+            {
+                const unsigned char *copy = (const unsigned char *)__wxtk_app[19];
+                const unsigned long *mh = (const unsigned long *)__wxtk_app[20];
+                printf("idleprobe: copy %p, a4_init %p, data_size %lu, program's offset %lx\n", (const void *)copy,
+                       (void *)mh[5], mh[6], (unsigned long)((const unsigned char *)&wxEVT_IDLE - copy));
+                int n = 0;
+                for ( unsigned long k = 0; k + 4 <= mh[6] && n < 8; k += 2 )
+                    if ( *(const long *)(copy + k) == g_idleType )
+                        { printf("idleprobe: the module's idle type found at offset %lx\n", k); n++; }
+                fflush(stdout);
+            }
         }
         printf("idleprobe: wxTheApp %p (this %p)\n", (void *)wxTheApp, (void *)this);
         fflush(stdout);
