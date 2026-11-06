@@ -36,13 +36,12 @@ RTLIBS="$WORK/base/wxamiga_crt.o $WORK/base/wxamiga_stubs.o -lsocket -lpthread -
 m68k-amigaos-as -m68040 "$L/rtprobe.s" -o "$L/rtprobe.o"
 printf 'int main(void) { return 0; }\n' > "$L/rtmain.c"
 m68k-amigaos-gcc $CF -c "$L/rtmain.c" -o "$L/rtmain.o"
-# first with what nothing defines allowed: the members that need it are
-# left out (wx files for backends this build lacks), then for real
+# first to learn what nothing defines (the link may fail): the members that
+# need it are left out (wx files for backends this build lacks), then for real
 # shellcheck disable=SC2086
 m68k-amigaos-g++ -noixemul -m68040 -specs="$SPECS" -o "$L/rtprobe0" "$L/rtmain.o" "$L/rtprobe.o" $RTLIBS \
-    -Wl,--unresolved-symbols=ignore-all
-m68k-amigaos-objdump -t "$L/rtprobe0" > "$L/rtprobe0.t"
-python3 "$HERE/scripts/wxtk-gen.py" prune "$L" "$L/rtprobe0.t"
+    -Wl,--no-demangle > "$L/rtprobe0.log" 2>&1 || true
+python3 "$HERE/scripts/wxtk-gen.py" prune "$L" "$L/rtprobe0.log"
 m68k-amigaos-as -m68040 "$L/rtprobe.s" -o "$L/rtprobe.o"
 # shellcheck disable=SC2086
 m68k-amigaos-g++ -noixemul -m68040 -specs="$SPECS" -o "$L/rtprobe" "$L/rtmain.o" "$L/rtprobe.o" $RTLIBS

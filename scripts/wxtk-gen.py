@@ -11,10 +11,10 @@ the wx module (src/library/wxtoolkit_library.h).
         symbols.json  what they define and what they leave undefined
         rtprobe.s     a table naming every symbol the module needs from a
                       program's C library, to link a probe program with
-  wxtk-gen.py prune OUTDIR RTPROBE.t
-      after a probe program linked with unresolved symbols allowed, leaves
-      out the members that need a symbol nothing defines, and writes the
-      three files again
+  wxtk-gen.py prune OUTDIR LINK.log
+      after a probe program's link (--no-demangle) that named what nothing
+      defines, leaves out the members that need such a symbol, and writes
+      the three files again
   wxtk-gen.py emit OUTDIR RTPROBE.t
       reads the probe program's symbol table (objdump -t: where each C
       library symbol lives, so code from data) and writes
@@ -208,10 +208,20 @@ def write_selection(outdir, chosen, good):
         print("wxtk-gen: warning: members carry libnix lists the module doesn't run: %s" % " ".join(sorted(lists)))
 
 
-def prune(outdir, rtprobe_t):
-    """after a probe linked with unresolved symbols allowed: keep the members
-    whose every need is met"""
-    good = {name for name, val, flags, sec in parse_t(rtprobe_t) if sec not in ("*UND*", "*ABS*")}
+def prune(outdir, missing_txt):
+    """after a probe program's link named what nothing defines (ld's
+    "undefined reference to `X'" lines, with --no-demangle): keep the
+    members whose every need is met"""
+    missing = set()
+    for line in open(missing_txt, errors="replace"):
+        m = re.search(r"undefined reference to [`'\"]([^'`\"]+)['`\"]", line)
+        if m:
+            missing.add(m.group(1))
+            missing.add("_" + m.group(1))
+    sym = json.load(open(os.path.join(outdir, "symbols.json")))
+    good = set(sym["imports"]) - missing
+    if not missing:
+        print("wxtk-gen: the probe found every symbol")
     chosen = json.load(open(os.path.join(outdir, "members.json")))
     write_selection(outdir, chosen, good)
 
