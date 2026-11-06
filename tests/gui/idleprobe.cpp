@@ -23,6 +23,13 @@ public:
         printf("idleprobe: wxEVT_IDLE at %p = %ld, wxEVT_ASYNC_METHOD_CALL at %p = %ld, wxEVT_BUTTON = %ld\n",
                (const void *)&wxEVT_IDLE, (long)(wxEventType)wxEVT_IDLE,
                (const void *)&wxEVT_ASYNC_METHOD_CALL, (long)(wxEventType)wxEVT_ASYNC_METHOD_CALL, (long)(wxEventType)wxEVT_BUTTON);
+        {
+            wxObject *o = wxCreateDynamicObject("wxIdleEvent");
+            wxEvent *ev = wxDynamicCast(o, wxEvent);
+            printf("idleprobe: the module's idle event type %ld, next new type %ld\n",
+                   ev ? (long)ev->GetEventType() : -1L, (long)wxNewEventType());
+            delete o;
+        }
         printf("idleprobe: wxTheApp %p (this %p)\n", (void *)wxTheApp, (void *)this);
         fflush(stdout);
         wxFrame *f = new wxFrame(NULL, wxID_ANY, "idleprobe");
