@@ -132,7 +132,9 @@ long wxtk_module_entry(void)
     const long *b = _EH_FRAME_BEGINS__ + 1;
     long *o = _EH_FRAME_OBJECTS__ + 1;
     const wxtk_fn *p0 = __CTOR_LIST__ + 1, *p;
-    tracing = getenv("WXTK_DEBUG") != NULL;
+    tracing = 1;    /* TEMPORARY: always, while the start is proved */
+    trace("start", 0);
+    tracing = getenv("WXTK_DEBUG") != NULL || 1;
     trace("start, A4", (unsigned long)my_a4());
     while (*b) __register_frame_info((const void *)*b++, (void *)*o++);
     trace("EH frames", (unsigned long)(b - _EH_FRAME_BEGINS__ - 1));
