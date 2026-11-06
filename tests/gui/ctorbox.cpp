@@ -3,14 +3,14 @@
  * gadget. Writes RAM:ctorbox.<step> as it goes.
  * Copyright (c) 2026 AmiCradle Team */
 #include <wx/wx.h>
-#include <proto/dos.h>
+#include <stdio.h>
 
 static void Step(const char *n)
 {
     wxString name = wxString("RAM:ctorbox.") + n;
-    BPTR f = Open((CONST_STRPTR)(const char *)name.mb_str(), MODE_NEWFILE);
+    FILE *f = fopen((const char *)name.mb_str(), "w");
     if (f)
-        Close(f);
+        fclose(f);
 }
 
 class Frame : public wxFrame
