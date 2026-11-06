@@ -76,8 +76,9 @@ if [ -f "$BW/library/wctest.o" ]; then
             && echo "$t-tr linked"
     done
     m68k-amigaos-objdump -h "$OUTD/lab/wctest-tr" 2>&1 | head -20
-    echo "== wctest-tr's init and exit lists as linked (function, priority+128)"
-    m68k-amigaos-objdump -s --start-address=0xa7e40 --stop-address=0xa7f58 "$OUTD/lab/wctest-tr" 2>&1 | tail -n 25
+    echo "== libnix's cxxglue (init -5, after the glue)"
+    NIX=$(m68k-amigaos-gcc -noixemul -m68040 -print-file-name=libnix.a)
+    (cd "$BW/library" && rm -rf nixx && mkdir nixx && cd nixx && m68k-amigaos-ar x "$NIX" cxxglue.o && m68k-amigaos-objdump -d -r cxxglue.o | head -150; m68k-amigaos-nm cxxglue.o)
     echo "== wctest-tr's set lists"
     awk '/^ ?\.list___(CTOR|INIT|EXIT|DTOR)_LIST__/{p=1;print;next} p&&/^ ?\.[a-z]/{p=0} p' "$OUTD/lab/wctest-tr.map" | cut -c1-160 | head -150
 fi
