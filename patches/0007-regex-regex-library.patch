@@ -1,5 +1,5 @@
 --- a/src/common/regex.cpp	2026-11-06 12:03:47.358223955 +0000
-+++ b/src/common/regex.cpp	2026-11-06 12:03:47.381127559 +0000
++++ b/src/common/regex.cpp	2026-11-06 12:09:55.849591970 +0000
 @@ -41,7 +41,11 @@
  // PCRE and the old regex library implementation at makefile level, so we just
  // always use PCRE and the old code is only kept temporarily in case we decide
@@ -66,3 +66,30 @@
  #endif
              flagsRE |= REG_EXTENDED;
      }
+@@ -1109,7 +1135,11 @@
+         {
+             // we will alloc the array later (only if really needed) but count
+             // the number of sub-expressions in the regex right now
++#if wxUSE_PCRE
+             m_nMatches = pcre2_get_ovector_count(m_RegEx.match_data);
++#else
++            m_nMatches = m_RegEx.re_nsub + 1;
++#endif
+         }
+ 
+         m_isCompiled = true;
+@@ -1474,10 +1504,14 @@
+ /* static */
+ wxVersionInfo wxRegEx::GetLibraryVersionInfo()
+ {
++#if wxUSE_PCRE
+     wxRegChar buf[64];
+     pcre2_config(PCRE2_CONFIG_VERSION, buf);
+ 
+     return wxVersionInfo("PCRE2", PCRE2_MAJOR, PCRE2_MINOR, 0, buf);
++#else
++    return wxVersionInfo("regex.library", 1, 0, 0, "GFOpenRegex");
++#endif
+ }
+ 
+ #endif // wxUSE_REGEX
