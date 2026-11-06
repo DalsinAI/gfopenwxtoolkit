@@ -30,3 +30,6 @@ src/unix/sound.cpp
 -src/generic/graphicc.cpp
 # the PostScript printer DC (wx builds it only for GTK and X11), for PRINTING_ARCHITECTURE POSTSCRIPT
 src/generic/dcpsg.cpp
+# PNG and JPEG through datatypes: our handlers in src/openlayout/dtimage.cpp
+-src/common/imagpng.cpp
+-src/common/imagjpeg.cpp

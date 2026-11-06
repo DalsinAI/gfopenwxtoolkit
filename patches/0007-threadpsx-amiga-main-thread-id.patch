@@ -1,0 +1,18 @@
+--- a/src/unix/threadpsx.cpp	2026-11-06 08:41:37.051062041 +0000
++++ b/src/unix/threadpsx.cpp	2026-11-06 08:41:37.068598273 +0000
+@@ -1344,7 +1344,15 @@
+ 
+ wxThreadIdType wxThread::GetCurrentId()
+ {
++#ifdef __AMIGA__
++    // AmigaOS's libpthread gives the main task the id 0, and IsMain()
++    // takes 0 for "no main thread known yet": every thread would pass for
++    // the main one. One more than pthread_self() is never 0 and stays one
++    // id per task.
++    return (wxThreadIdType)pthread_self() + 1;
++#else
+     return (wxThreadIdType)pthread_self();
++#endif
+ }
+ 
+ 
