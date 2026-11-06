@@ -36,7 +36,8 @@ static LONG wxtk_bind(struct WXTKApp *app)
     register LONG d0 __asm("d0");
     register struct Library *a6 __asm("a6") = wxtk_base;
     register struct WXTKApp *a0 __asm("a0") = app;
-    __asm volatile ("jsr -30(%%a6)" : "=r"(d0) : "r"(a6), "r"(a0) : "d1", "a1", "cc", "memory");
+    /* (a library call may change A0: it is an output too) */
+    __asm volatile ("jsr -30(%%a6)" : "=r"(d0), "+r"(a0) : "r"(a6) : "d1", "a1", "cc", "memory");
     return d0;
 }
 
