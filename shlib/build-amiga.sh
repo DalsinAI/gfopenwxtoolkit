@@ -7,7 +7,14 @@
 set -u
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 WORK="$HOME/.cache/gfopenwxtoolkit/library-build"
-count() { echo "progress $(date +%T): gui objects $(ls "$WORK/gui/obj" 2>/dev/null | grep -c '\.o$'), load $(cut -d' ' -f1-3 /proc/loadavg)"; }
+OUTD="${OUT:-out}"; mkdir -p "$OUTD"
+# Cradle shows a job's output files even when its log is lost: the
+# progress goes into their names too
+count() {
+    n=$(ls "$WORK/gui/obj" 2>/dev/null | grep -c '\.o$'); l=$(cut -d' ' -f1 /proc/loadavg)
+    echo "progress $(date +%T): gui objects $n, load $l"
+    : > "$OUTD/progress-$(date +%H%M)-gui$n-load$l"
+}
 count
 ls -la "$WORK" "$WORK/wxgui" 2>&1 | head -20
 ( while sleep 120; do count; done ) &
