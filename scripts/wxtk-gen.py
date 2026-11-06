@@ -11,6 +11,10 @@ the wx module (src/library/wxtoolkit_library.h).
         symbols.json  what they define and what they leave undefined
         rtprobe.s     a table naming every symbol the module needs from a
                       program's C library, to link a probe program with
+  wxtk-gen.py prune OUTDIR RTPROBE.t
+      after a probe program linked with unresolved symbols allowed, leaves
+      out the members that need a symbol nothing defines, and writes the
+      three files again
   wxtk-gen.py emit OUTDIR RTPROBE.t
       reads the probe program's symbol table (objdump -t: where each C
       library symbol lives, so code from data) and writes
@@ -68,6 +72,42 @@ def objdump(path):
     return secs, syms
 
 
+BASESECS = (".text", ".data", ".bss", ".rodata")
+
+
+def member_info(m, arch):
+    """what one member defines and leaves undefined"""
+    secs, syms = objdump(m)
+    lists = [s for s in secs if s.startswith((".list___INIT", ".list___EXIT", ".dlist___LIB"))]
+    # sizes of data symbols: to the next symbol in the section, or its end
+    bysec = {}
+    for name, val, flags, sec in syms:
+        if sec not in ("*UND*", "*ABS*", "*COM*"):
+            bysec.setdefault(sec, []).append(val)
+    for v in bysec.values():
+        v.sort()
+    defs, undef, linkonce = {}, set(), set()
+    for name, val, flags, sec in syms:
+        if sec == "*UND*":
+            undef.add(name)
+            continue
+        if sec == "*ABS*" or not ("g" in flags or "w" in flags) or PRIVATE.match(name):
+            continue
+        if sec == "*COM*":
+            kind, size = "data", val
+        else:
+            code = sec.startswith(".text") and not TYPEDATA.match(name)
+            kind = "code" if code else "data"
+            later = [x for x in bysec[sec] if x > val]
+            size = (min(later) if later else secs.get(sec, val + 4)) - val
+            if sec not in BASESECS:
+                linkonce.add(name)      # an inline function's or template's own section
+        weak = "w" in flags and "g" not in flags
+        defs[name] = {"kind": kind, "weak": weak, "size": max(size, 2)}
+    return {"path": m, "arch": arch, "defs": defs, "undef": sorted(undef),
+            "linkonce": sorted(linkonce), "lists": lists}
+
+
 def scan(outdir, archives, extras):
     xdir = os.path.join(outdir, "x")
     members = []
@@ -78,52 +118,80 @@ def scan(outdir, archives, extras):
         subprocess.run([AR, "x", os.path.abspath(a)], cwd=d, check=True)
         if len(set(names)) != len(names):
             sys.exit("wxtk-gen: %s has members of the same name" % a)
-        members += [os.path.join(d, n) for n in names]
-    members += extras
-    taken = set()
+        members += [(os.path.join(d, n), i) for n in names]
+    members += [(e, -1) for e in extras]
+    info = [member_info(m, i) for m, i in members]
+    # a symbol two members of one archive both define strongly is an inline
+    # function or template (one copy per object, the linker keeps one): it
+    # never decides which member a link takes
+    seen, shared = {}, set()
+    for mi in info:
+        for n, d in mi["defs"].items():
+            if d["weak"]:
+                continue
+            k = (mi["arch"], n)
+            if k in seen:
+                shared.add(n)
+            seen[k] = 1
+    for mi in info:
+        mi["shared"] = sorted(shared.intersection(mi["defs"]) | set(mi["linkonce"]))
+    # a member whose own strong symbols an earlier archive already gives is
+    # left out, as a static link would never take it: the GUI build's copies
+    # of wxBase files win
+    taken, cur, cur_arch = set(), set(), None
     chosen, skipped = [], []
-    defs = {}          # name -> {kind, weak, size}
-    undef = set()
-    lists = set()
-    for m in members:
-        secs, syms = objdump(m)
-        strong = {s[0] for s in syms if "g" in s[2] and s[3] not in ("*UND*", "*ABS*")}
-        if strong & taken and m not in extras:
-            skipped.append(os.path.basename(m))
+    for mi in info:
+        if mi["arch"] != cur_arch:
+            taken |= cur
+            cur, cur_arch = set(), mi["arch"]
+        own = {n for n, d in mi["defs"].items() if not d["weak"]} - set(mi["shared"])
+        if own & taken and mi["arch"] >= 0:
+            skipped.append(os.path.basename(mi["path"]))
             continue
-        taken |= strong
-        chosen.append(m)
-        for sec in secs:
-            if sec.startswith(".list___INIT") or sec.startswith(".list___EXIT") or sec.startswith(".dlist___LIB"):
-                lists.add(sec)
-        # sizes of data symbols: to the next symbol in the section, or its end
-        bysec = {}
-        for name, val, flags, sec in syms:
-            if sec not in ("*UND*", "*ABS*", "*COM*"):
-                bysec.setdefault(sec, []).append(val)
-        for v in bysec.values():
-            v.sort()
-        for name, val, flags, sec in syms:
-            if sec == "*UND*":
-                undef.add(name)
-                continue
-            if sec == "*ABS*" or not ("g" in flags or "w" in flags) or PRIVATE.match(name):
-                continue
-            if sec == "*COM*":
-                kind, size = "data", val
-            else:
-                code = sec.startswith(".text") and not TYPEDATA.match(name)
-                kind = "code" if code else "data"
-                later = [x for x in bysec[sec] if x > val]
-                size = (min(later) if later else secs.get(sec, val + 4)) - val
-            weak = "w" in flags and "g" not in flags
-            old = defs.get(name)
+        cur |= own
+        chosen.append(mi)
+    with open(os.path.join(outdir, "members.json"), "w") as f:
+        json.dump(chosen, f)
+    print("wxtk-gen: %d members (%d left out: %s)" % (len(chosen), len(skipped), " ".join(skipped)))
+    write_selection(outdir, chosen, None)
+
+
+def write_selection(outdir, chosen, good):
+    """members.rsp, symbols.json and rtprobe.s for these members. With good
+    (the C library symbols a probe program found), a member that needs a
+    symbol neither the module nor the C library has is left out, and so on
+    until none does: wx files for things this build has no backend for
+    (wxPostScriptDC) never reach the module, as no static link takes them."""
+    chosen = list(chosen)
+    dropped = []
+    while True:
+        defined = set()
+        for mi in chosen:
+            defined.update(mi["defs"])
+        if good is None:
+            break
+        bad = [mi for mi in chosen if mi["arch"] >= 0 and
+               any(u not in defined and u not in good and not PRIVATE.match(u) for u in mi["undef"])]
+        if not bad:
+            break
+        for mi in bad:
+            miss = sorted(u for u in mi["undef"] if u not in defined and u not in good and not PRIVATE.match(u))
+            dropped.append("%s (%s)" % (os.path.basename(mi["path"]), miss[0]))
+        chosen = [mi for mi in chosen if mi not in bad]
+    defs, undef, lists = {}, set(), set()
+    for mi in chosen:
+        lists.update(mi["lists"])
+        undef.update(mi["undef"])
+        sh = set(mi["shared"])
+        for n, d in mi["defs"].items():
+            d = dict(d, weak=d["weak"] or n in sh)
+            old = defs.get(n)
             if old and not old["weak"]:
                 continue
-            defs[name] = {"kind": kind, "weak": weak, "size": max(size, 2)}
+            defs[n] = d
     imports = sorted(n for n in undef if n not in defs and not PRIVATE.match(n))
     with open(os.path.join(outdir, "members.rsp"), "w") as f:
-        f.write("\n".join(chosen) + "\n")
+        f.write("\n".join(mi["path"] for mi in chosen) + "\n")
     with open(os.path.join(outdir, "symbols.json"), "w") as f:
         json.dump({"exports": defs, "imports": imports}, f)
     with open(os.path.join(outdir, "rtprobe.s"), "w") as f:
@@ -132,10 +200,20 @@ def scan(outdir, archives, extras):
             f.write("\t.long %s\n" % n)
     nweak = sum(1 for d in defs.values() if d["weak"])
     ncode = sum(1 for d in defs.values() if d["kind"] == "code")
-    print("wxtk-gen: %d members (%d left out: %s), %d exports (%d code, %d data, %d weak), %d imports"
-          % (len(chosen), len(skipped), " ".join(skipped), len(defs), ncode, len(defs) - ncode, nweak, len(imports)))
+    if dropped:
+        print("wxtk-gen: %d members left out for symbols nothing defines: %s" % (len(dropped), " ".join(dropped)))
+    print("wxtk-gen: %d members, %d exports (%d code, %d data, %d weak), %d imports"
+          % (len(chosen), len(defs), ncode, len(defs) - ncode, nweak, len(imports)))
     if lists:
         print("wxtk-gen: warning: members carry libnix lists the module doesn't run: %s" % " ".join(sorted(lists)))
+
+
+def prune(outdir, rtprobe_t):
+    """after a probe linked with unresolved symbols allowed: keep the members
+    whose every need is met"""
+    good = {name for name, val, flags, sec in parse_t(rtprobe_t) if sec not in ("*UND*", "*ABS*")}
+    chosen = json.load(open(os.path.join(outdir, "members.json")))
+    write_selection(outdir, chosen, good)
 
 
 def emit(outdir, rtprobe_t):
@@ -303,6 +381,8 @@ if __name__ == "__main__":
             k = rest.index("--")
             rest, extras = rest[:k], rest[k + 1:]
         scan(sys.argv[2], rest, extras)
+    elif len(sys.argv) == 4 and sys.argv[1] == "prune":
+        prune(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 4 and sys.argv[1] == "emit":
         emit(sys.argv[2], sys.argv[3])
     else:
