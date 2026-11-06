@@ -27,6 +27,7 @@
     #include "wx/settings.h"
     #include "wx/toplevel.h"
     #include "wx/artprov.h"
+    #include "wx/dcscreen.h"
 #endif
 
 #include "wx/tglbtn.h"
@@ -184,6 +185,22 @@ void wxAnyButton::OLOnPaint(wxPaintEvent& WXUNUSED(event))
 }
 
 // (wxButton's class info is in wx's common code)
+
+wxSize wxButtonBase::GetDefaultSize(wxWindow *win)
+{
+    // the size DoGetBestSize gives a short text button: a line of the
+    // window's (or the GUI) font with 8 pixels round it, and 60 wide
+    int h;
+    if ( win )
+        h = win->GetCharHeight();
+    else
+    {
+        wxScreenDC dc;
+        dc.SetFont(wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT));
+        h = dc.GetCharHeight();
+    }
+    return wxSize(60, h + 8);
+}
 
 bool wxButton::Create(wxWindow *parent, wxWindowID id, const wxString& label, const wxPoint& pos,
                       const wxSize& size, long style, const wxValidator& validator, const wxString& name)

@@ -39,6 +39,12 @@
 
 #include "private.h"
 
+// workbench.library, opened only while a document is being opened
+#define __NOLIBBASE__
+#include <proto/wb.h>
+#undef __NOLIBBASE__
+static struct Library *WorkbenchBase;
+
 // ---- cybergraphics ----------------------------------------------------------
 
 struct Library *wxOLCyberGfxBase = NULL;
@@ -513,4 +519,24 @@ bool wxFontEnumerator::EnumerateEncodings(const wxString& facename)
 {
     // the Amiga's fonts are Latin-1
     return OnFontEncoding(facename, "iso8859-1");
+}
+
+// ----------------------------------------------------------------------------
+// wxLaunchDefaultApplication: Workbench opens the document the way a double
+// click on its icon does (its default tool, or the file type's), with
+// workbench.library 44's OpenWorkbenchObjectA. False when Workbench isn't
+// running or can't open it.
+// ----------------------------------------------------------------------------
+
+bool wxLaunchDefaultApplication(const wxString& document, int WXUNUSED(flags))
+{
+    struct Library *base = OpenLibrary((CONST_STRPTR)"workbench.library", 44);
+    if ( !base )
+        return false;
+    WorkbenchBase = base;
+    const wxCharBuffer name = document.fn_str();
+    const BOOL ok = OpenWorkbenchObjectA((CONST_STRPTR)name.data(), NULL);
+    WorkbenchBase = NULL;
+    CloseLibrary(base);
+    return ok != FALSE;
 }
