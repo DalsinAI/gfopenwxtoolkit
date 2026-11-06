@@ -6,9 +6,11 @@
  * library's threads start at -6) it opens the
  * library, which makes this program's copy of the wx module's data, joins
  * the two and runs the module's start (wxtoolkit_library.h); __wxtk_a4 is
- * then A4 for every call into the module. At exit, the module's atexit list
- * (the program's static destructors are on it too) and destructors run at
- * the same priority, before the libraries close.
+ * then A4 for every call into the module. At exit (priority -6: after libnix's
+ * entries at -5, whose EH frame end still calls into the module, and before
+ * the C library's threads and libraries close) the module's atexit list (the
+ * program's static destructors are on it too) and destructors run and its
+ * copy goes.
  * Copyright (c) 2026 AmiCradle Team
  */
 #include <exec/types.h>
@@ -99,4 +101,4 @@ void __wxtk_init(void)
         Write(Output(), (APTR)"openwxtoolkit: bound\n", 21);
 }
 ADD2INIT(__wxtk_init, -5);
-ADD2EXIT(__wxtk_exit, -5);
+ADD2EXIT(__wxtk_exit, -6);
