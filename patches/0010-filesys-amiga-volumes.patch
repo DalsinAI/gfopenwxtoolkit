@@ -1,0 +1,82 @@
+--- a/src/common/filesys.cpp	2026-11-06 10:55:22.059703064 +0000
++++ b/src/common/filesys.cpp	2026-11-06 10:55:22.403630657 +0000
+@@ -347,6 +347,43 @@
+ }
+ 
+ 
++#ifdef __AMIGA__
++// AmigaOS: a location that starts with a volume or assign
++// ("System:CodeBlocks/share/x.zip#zip:y.html", as programs build them from
++// their data directory) names a local file, but wxFileSystem would take
++// "System:" for a protocol. Such a location's file part is turned into a
++// "file:" URL (wxFileName::FileNameToURL escapes the volume's ':'); the rest
++// ("#zip:...") is kept.
++static bool wxAmigaIsProtocol(const wxString& name)
++{
++    static const char *const protocols[] = {
++        "file", "zip", "tar", "gzip", "zlib", "memory", "http", "https", "ftp",
++        "mailto", "news", "data", "about", "inet", "archive", "filter", "mem", NULL
++    };
++    for ( int i = 0; protocols[i]; i++ )
++        if ( name == protocols[i] )
++            return true;
++    return false;
++}
++
++static wxString wxAmigaVolumeToURL(const wxString& location)
++{
++    const size_t colon = location.find(wxT(':'));
++    if ( colon == wxString::npos || colon == 0 )
++        return location;
++    // a volume's name runs to the first ':', before any '/' or '#'
++    const size_t stop = location.find_first_of(wxT("/#"));
++    if ( stop != wxString::npos && stop < colon )
++        return location;
++    if ( wxAmigaIsProtocol(location.Left(colon)) )
++        return location;
++    const size_t hash = location.find(wxT('#'));
++    const wxString file = location.Left(hash);
++    const wxString rest = hash == wxString::npos ? wxString() : location.Mid(hash);
++    return wxFileName::FileNameToURL(wxFileName(file)) + rest;
++}
++#endif // __AMIGA__
++
+ static wxString MakeCorrectPath(const wxString& path)
+ {
+     wxString p(path);
+@@ -390,7 +427,11 @@
+ void wxFileSystem::ChangePathTo(const wxString& location, bool is_dir)
+ {
+ 
++#ifdef __AMIGA__
++    m_Path = MakeCorrectPath(wxAmigaVolumeToURL(location));
++#else
+     m_Path = MakeCorrectPath(location);
++#endif
+ 
+     if (is_dir)
+     {
+@@ -466,7 +507,11 @@
+     if ((flags & wxFS_READ) == 0)
+         return NULL;
+ 
++#ifdef __AMIGA__
++    wxString loc = MakeCorrectPath(wxAmigaVolumeToURL(location));
++#else
+     wxString loc = MakeCorrectPath(location);
++#endif
+     unsigned i, ln;
+     wxChar meta;
+     wxFSFile *s = NULL;
+@@ -535,7 +580,11 @@
+ wxString wxFileSystem::FindFirst(const wxString& spec, int flags)
+ {
+     wxList::compatibility_iterator node;
++#ifdef __AMIGA__
++    wxString spec2(wxAmigaVolumeToURL(spec));
++#else
+     wxString spec2(spec);
++#endif
+ 
+     m_FindFileHandler = NULL;
+ 

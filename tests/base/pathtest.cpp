@@ -12,6 +12,11 @@
 #include <wx/log.h>
 #include <wx/atomic.h>
 #include <wx/utils.h>
+#include <wx/filesys.h>
+#include <wx/fs_arc.h>
+#include <wx/zipstrm.h>
+#include <wx/wfstream.h>
+#include <wx/txtstrm.h>
 #include <cstdio>
 
 static int failed = 0;
@@ -60,6 +65,35 @@ int main(int argc, char **argv)
     wxFileName fn("System:CodeBlocks/share/codeblocks/x.txt");
     fn.MakeAbsolute();
     Check("wxFileName keeps System:CodeBlocks/...", fn.GetFullPath() == "System:CodeBlocks/share/codeblocks/x.txt");
+    // wxFileSystem on volume paths, as Code::Blocks opens its resources
+    {
+        wxFileSystem::AddHandler(new wxArchiveFSHandler);
+        {
+            wxFFileOutputStream fo("RAM:T/fstest.zip");
+            wxZipOutputStream zip(fo);
+            zip.PutNextEntry("a.txt");
+            zip.Write("hello", 5);
+        }
+        std::printf("url:      %s\n", (const char *)wxFileSystem::FileNameToURL(wxFileName("RAM:T/fstest.zip")).mb_str());
+        wxFileSystem fs;
+        wxFSFile *f = fs.OpenFile("RAM:T/fstest.zip");
+        Check("wxFileSystem opens RAM:T/fstest.zip", f != NULL);
+        delete f;
+        f = fs.OpenFile("RAM:T/fstest.zip#zip:a.txt");
+        char buf[8] = {0};
+        if (f)
+            f->GetStream()->Read(buf, 5);
+        Check("wxFileSystem reads RAM:T/fstest.zip#zip:a.txt", f && std::string(buf) == "hello");
+        delete f;
+        fs.ChangePathTo("RAM:T/fstest.zip#zip:", true);
+        f = fs.OpenFile("a.txt");
+        Check("wxFileSystem reads a.txt after ChangePathTo(RAM:T/fstest.zip#zip:)", f != NULL);
+        delete f;
+        wxString found = wxFileSystem().FindFirst("RAM:T/fstest.zip#zip:*.txt");
+        std::printf("found:    %s\n", (const char *)found.mb_str());
+        Check("wxFileSystem finds RAM:T/fstest.zip#zip:*.txt", !found.empty());
+        wxRemoveFile("RAM:T/fstest.zip");
+    }
     for (int i = 0; i < 4; i++) {
         Detached *t = new Detached;
         Check("detached thread made", t->Run() == wxTHREAD_NO_ERROR);
