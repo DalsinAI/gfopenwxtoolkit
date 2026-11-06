@@ -184,8 +184,7 @@ void __wxtk_init(void)
         /* (a test: the program's own exception tables left out) */
         if (GetVar((CONST_STRPTR)"WXTK_NOEH", (STRPTR)v, sizeof v, 0) >= 0) wxtk_reg_fi = wxtk_dereg_fi = NULL;
     }
-    if (wxtk_debug && Output())
-        Write(Output(), (APTR)"openwxtoolkit: bound\n", 21);
+    wxtk_say("openwxtoolkit: bound, A4", __wxtk_a4, app->a4);
 }
 ADD2INIT(__wxtk_init, -5);
 ADD2EXIT(__wxtk_exit, -6);
