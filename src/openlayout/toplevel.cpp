@@ -1517,17 +1517,8 @@ void wxFrame::OLMenuPicked(unsigned short code)
 
 wxPoint wxFrame::GetClientAreaOrigin() const
 {
-    wxPoint pt = wxFrameBase::GetClientAreaOrigin();
-#if wxUSE_TOOLBAR
-    if ( m_frameToolBar && m_frameToolBar->IsShown() )
-    {
-        if ( m_frameToolBar->GetWindowStyleFlag() & wxTB_VERTICAL )
-            pt.x += m_frameToolBar->GetSize().x;
-        else
-            pt.y += m_frameToolBar->GetSize().y;
-    }
-#endif
-    return pt;
+    // wxFrameBase's already leaves room for the frame's tool bar (once)
+    return wxFrameBase::GetClientAreaOrigin();
 }
 
 void wxFrame::DoGetClientSize(int *width, int *height) const
@@ -1598,6 +1589,11 @@ void wxFrame::PositionToolBar()
         else
             m_frameToolBar->SetSize(0, -th, size.x, th);
     }
+#if wxUSE_STATUSBAR
+    // the status bar sits below the client area, which the tool bar moves
+    // (SetToolBar positions only the tool bar)
+    PositionStatusBar();
+#endif
 }
 #endif
 
