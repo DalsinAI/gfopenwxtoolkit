@@ -248,6 +248,16 @@ struct TextFont *wxFont::GetTextFont() const
     if ( d->m_info.GetStyle() != wxFONTSTYLE_NORMAL )
         style |= FSF_ITALIC;
     d->m_tf = OpenCached(name.c_str(), (UWORD)px, style);
+    if ( !d->m_tf && name.find(' ') != std::string::npos )
+    {
+        // other systems name faces with spaces ("DejaVu Sans Mono"); in
+        // FONTS: the file is DejaVuSansMono.font
+        std::string packed;
+        for ( size_t i = 0; i < name.size(); i++ )
+            if ( name[i] != ' ' )
+                packed += name[i];
+        d->m_tf = OpenCached(packed.c_str(), (UWORD)px, style);
+    }
     if ( !d->m_tf && name != "topaz.font" )
         d->m_tf = OpenCached("topaz.font", (UWORD)px, style);
     if ( d->m_tf )
