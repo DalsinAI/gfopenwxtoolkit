@@ -79,8 +79,9 @@ if [ "$want_libs" = 1 ]; then
     if [ "${WXTK_SHARED:-0}" = 1 ]; then
         # openwxtoolkit.library: wx itself comes from LIBS: when the program
         # starts; the program links only the glue and the C library calls
-        # wx needs (src/library/wxtoolkit_library.h)
-        out="$out $L/wxtoolkit-tables.o $L/wxtoolkit-glue.o $L/libwxamiga-$release.a -Wl,-lsocket,-lpthread,-latomic,-lm,-lamiga"
+        # wx needs (src/library/wxtoolkit_library.h), built for a program
+        # (libwxamiga's own are -fbaserel32 in a library build)
+        out="$out $L/wxtoolkit-tables.o $L/wxtoolkit-glue.o $L/libwxamiga-shared-$release.a -Wl,-lsocket,-lpthread,-latomic,-lm,-lamiga"
         echo $out
         exit 0
     fi

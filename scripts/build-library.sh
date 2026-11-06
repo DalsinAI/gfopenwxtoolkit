@@ -80,7 +80,13 @@ done_ link || { python3 "$HERE/scripts/wxtk-gen.py" link "$L" "$L/mod1.t" "$L/mo
 if [ -n "${WXTK_ARCHIVES:-}" ]; then
     RTLIBS="-lpthread -latomic -lm -lamiga"
 else
-    RTLIBS="$WORK/base/wxamiga_crt.o $WORK/base/wxamiga_stubs.o -lsocket -lpthread -latomic -lm -lamiga"
+    # the C library calls wx needs that libnix lacks are the program's, so
+    # built as a program's code is: not -fbaserel32 as wx's own are here
+    # (A4 is the module's), -ffixed-a4 as WXTK_SHARED=1 builds a program
+    COMPAT="$HERE/include/wx/openlayout/amigacompat.h"
+    m68k-amigaos-g++ $CF -ffixed-a4 -include "$COMPAT" -std=gnu++17 -Wall -c "$HERE/src/amiga/wxamiga_crt.cpp" -o "$L/wxamiga_crt.o"
+    m68k-amigaos-gcc $CF -ffixed-a4 -include "$COMPAT" -Wall -c "$HERE/src/amiga/wxamiga_stubs.c" -o "$L/wxamiga_stubs.o"
+    RTLIBS="$L/wxamiga_crt.o $L/wxamiga_stubs.o -lsocket -lpthread -latomic -lm -lamiga"
 fi
 printf 'int main(void) { return 0; }\n' > "$L/rtmain.c"
 m68k-amigaos-gcc $CF -c "$L/rtmain.c" -o "$L/rtmain.o"
@@ -122,6 +128,8 @@ m68k-amigaos-as -m68040 "$L/app_tables.s" -o "$L/wxtoolkit-tables.o"
 m68k-amigaos-gcc $CF -ffixed-a4 -Wall -I"$HERE/src/library" -c "$HERE/src/library/wxtk_glue.c" -o "$L/wxtoolkit-glue.o"
 if [ -d "$OUT/sdk/lib" ] && [ -z "${WXTK_ARCHIVES:-}" ]; then
     cp "$L/wxtoolkit-tables.o" "$L/wxtoolkit-glue.o" "$OUT/sdk/lib/"
+    rm -f "$OUT/sdk/lib/libwxamiga-shared-$R.a"
+    m68k-amigaos-ar rcs "$OUT/sdk/lib/libwxamiga-shared-$R.a" "$L/wxamiga_crt.o" "$L/wxamiga_stubs.o"
 fi
 ls -l "$OUT/Libs/openwxtoolkit.library" "$OUT/Libs/openwxtoolkit/wx.module" "$L/wxtoolkit-tables.o" "$L/wxtoolkit-glue.o"
 [ -z "${WXTK_ARCHIVES:-}" ] || exit 0

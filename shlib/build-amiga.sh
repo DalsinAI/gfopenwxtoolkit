@@ -67,6 +67,7 @@ done
 # (temporary) wctest and basetest again with a trace of how far their start gets
 BW="$C/library-build-os-baserel"
 if [ -f "$BW/library/wctest.o" ]; then
+    mkdir -p "$OUTD/lab"
     m68k-amigaos-gcc -noixemul -m68040 -Os -ffixed-a4 -c "$HERE/shlib/trace/inittrace.c" -o "$BW/library/inittrace.o"
     for t in wctest basetest; do
         # shellcheck disable=SC2046
