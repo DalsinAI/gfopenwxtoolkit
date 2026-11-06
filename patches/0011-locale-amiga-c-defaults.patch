@@ -1,0 +1,56 @@
+--- a/src/unix/uilocale.cpp	2026-11-06 12:04:56.913626907 +0000
++++ b/src/unix/uilocale.cpp	2026-11-06 12:04:57.265539801 +0000
+@@ -568,9 +568,39 @@
+ 
+ #endif // HAVE_LANGINFO_H
+ 
++#if defined(__AMIGA__) && defined(HAVE_LANGINFO_H)
++// AmigaOS: libnix's nl_langinfo() gives "" for these, and wx asserts on an
++// empty decimal point (wxString::FromCDouble replaces it with '.'): the C
++// locale's values stand in for what it leaves empty
++static wxString wxAmigaLangInfoOr(const wxString& value, const char *cvalue)
++{
++    return value.empty() ? wxString(cvalue) : value;
++}
++#endif // __AMIGA__
++
+ wxString
+ wxUILocaleImplUnix::GetInfo(wxLocaleInfo index, wxLocaleCategory cat) const
+ {
++#if defined(__AMIGA__) && defined(HAVE_LANGINFO_H)
++    switch ( index )
++    {
++        case wxLOCALE_DECIMAL_POINT:
++            return wxAmigaLangInfoOr(GetLangInfo(RADIXCHAR), ".");
++        case wxLOCALE_THOUSANDS_SEP:
++            // the C locale has none: wxNumberFormatter then groups no digits
++            return GetLangInfo(THOUSEP);
++        case wxLOCALE_SHORT_DATE_FMT:
++            return wxAmigaLangInfoOr(GetLangInfo(D_FMT), "%m/%d/%y");
++        case wxLOCALE_DATE_TIME_FMT:
++            return wxAmigaLangInfoOr(GetLangInfo(D_T_FMT), "%a %b %e %H:%M:%S %Y");
++        case wxLOCALE_TIME_FMT:
++            return wxAmigaLangInfoOr(GetLangInfo(T_FMT), "%H:%M:%S");
++        case wxLOCALE_LONG_DATE_FMT:
++            return wxGetDateFormatOnly(wxAmigaLangInfoOr(GetLangInfo(D_T_FMT), "%a %b %e %H:%M:%S %Y"));
++        default:
++            break;
++    }
++#endif // __AMIGA__
+ #ifdef HAVE_LANGINFO_H
+     switch ( index )
+     {
+--- a/src/common/intl.cpp	2026-11-06 12:04:57.229626925 +0000
++++ b/src/common/intl.cpp	2026-11-06 12:04:57.265745025 +0000
+@@ -1546,6 +1546,11 @@
+             {
+                 case wxLOCALE_CAT_DEFAULT:
+                 case wxLOCALE_CAT_NUMBER:
++#ifdef __AMIGA__
++                    // AmigaOS: libnix's may be empty, wx needs one
++                    if ( !lc->decimal_point || !*lc->decimal_point )
++                        return ".";
++#endif
+                     return lc->decimal_point;
+ 
+                 case wxLOCALE_CAT_MONEY:

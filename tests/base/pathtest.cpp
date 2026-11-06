@@ -13,6 +13,7 @@
 #include <wx/atomic.h>
 #include <wx/utils.h>
 #include <wx/filesys.h>
+#include <wx/uilocale.h>
 #include <wx/fs_arc.h>
 #include <wx/zipstrm.h>
 #include <wx/wfstream.h>
@@ -93,6 +94,16 @@ int main(int argc, char **argv)
         std::printf("found:    %s\n", (const char *)found.mb_str());
         Check("wxFileSystem finds RAM:T/fstest.zip#zip:*.txt", !found.empty());
         wxRemoveFile("RAM:T/fstest.zip");
+    }
+    // numbers and dates: libnix's locale leaves these empty
+    {
+        const wxString dp = wxUILocale::GetCurrent().GetInfo(wxLOCALE_DECIMAL_POINT);
+        std::printf("decimal:  '%s', date '%s', time '%s'\n", (const char *)dp.mb_str(),
+                    (const char *)wxUILocale::GetCurrent().GetInfo(wxLOCALE_SHORT_DATE_FMT).mb_str(),
+                    (const char *)wxUILocale::GetCurrent().GetInfo(wxLOCALE_TIME_FMT).mb_str());
+        Check("a decimal point", !dp.empty());
+        Check("wxString::FromCDouble(1.5) is 1.5", wxString::FromCDouble(1.5) == "1.5");
+        Check("wxString::FromDouble(2.25, 2) has 4 characters", wxString::FromDouble(2.25, 2).length() == 4);
     }
     for (int i = 0; i < 4; i++) {
         Detached *t = new Detached;
