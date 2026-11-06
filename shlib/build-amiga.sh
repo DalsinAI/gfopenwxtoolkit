@@ -86,6 +86,13 @@ if [ -f "$BW/library/wctest.o" ]; then
     echo "== wctest-tr's set lists"
     awk '/^ ?\.list___(CTOR|INIT|EXIT|DTOR)_LIST__/{p=1;print;next} p&&/^ ?\.[a-z]/{p=0} p' "$OUTD/lab/wctest-tr.map" | cut -c1-160 | head -150
 fi
+# (temporary) the lab's stack dumper, and what its last dump's addresses are
+m68k-amigaos-gcc -noixemul -m68040 -Os -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUTD/lab/StackDump" "$HERE/shlib/trace/stackdump.c" \
+    && echo "StackDump built"
+if [ -f "$HERE/shlib/trace/dump.txt" ]; then
+    echo "== the dump's addresses"
+    python3 "$HERE/shlib/trace/resolve.py" "$HERE/shlib/trace/dump.txt" "$BW/library/wx.module.map" "$OUTD/lab/wctest-tr.map" 2>&1 | head -150
+fi
 # the lab's timer: runs a command N times, E-clock ms each
 m68k-amigaos-gcc -noixemul -m68040 -Os -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$F/wxtime" "$HERE/tests/amiga/wxtime.c" \
     && echo "wxtime built"
