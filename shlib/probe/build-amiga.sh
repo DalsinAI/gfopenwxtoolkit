@@ -1,23 +1,21 @@
 #!/bin/sh
-# Temporary: what the module imports from a program's C library (from the
-# last shlib build), and which C library objects take callbacks.
+# Temporary: scripts/test-library.sh on the stove, its log into OUT.
 # Copyright (c) 2026 AmiCradle Team
 set -u
-WORK="$HOME/.cache/gfopenwxtoolkit/library-build"
-OUTD="${OUT:-out}"; mkdir -p "$OUTD"; LOG="$OUTD/probe.log"
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+OUTD="${OUT:-out}"; mkdir -p "$OUTD"
 PATH="$STOVE/prefix/bin:$PATH"
-L="$WORK/library"
-{
-echo "== imports.txt"; cat "$L/imports.txt"
-echo "== data sections of wx data exports (counts)"
-python3 - "$L/symbols.json" <<'X'
-import json,sys
-d=json.load(open(sys.argv[1]))
-print(len(d["exports"]), "exports", len(d["imports"]), "imports")
-X
-echo "== where libnix keeps errno, stdout"
-grep -n "errno\|__sF\|stdout\|_impure" "$(m68k-amigaos-gcc -print-sysroot 2>/dev/null)/include/errno.h" 2>/dev/null | head
-for h in errno.h stdio.h; do f=$(echo "#include <$h>" | m68k-amigaos-gcc -noixemul -E -x c - 2>/dev/null | grep -m1 "\"/.*$h\"" | sed 's/.*"\(.*\)".*/\1/'); echo "-- $f"; grep -n "errno\|stdout\|stdin\|__sF\|__stdfile" "$f" | head -12; done
-} > "$LOG" 2>&1
-echo done
+W="$HOME/.cache/gfopenwxtoolkit/libtest"
+rm -rf "$W"
+WORK="$W" OUT="$OUTD" timeout 800 sh "$HERE/scripts/test-library.sh" > "$OUTD/build.log" 2>&1
+rc=$?
+L="$W/library"
+{ echo "== exit $rc"; tail -n 80 "$OUTD/build.log"
+  for f in imports.txt exports.txt; do echo "== $f"; head -c 20000 "$L/$f" 2>/dev/null; done
+  echo "== mod1.log"; grep -v 'duplicate section' "$L/mod1.log" 2>/dev/null | head -60
+  echo "== mod_tables.s head"; head -40 "$L/mod_tables.s" 2>/dev/null
+  echo "== shapetest map (pulled from archives)"; grep -A1 "^Archive member" "$W/t/shapetest.map" 2>/dev/null | head -80
+} > "$OUTD/probe.log" 2>&1
+tail -n 30 "$OUTD/build.log"
+: > "$OUTD/exit-$rc"
 exit 0

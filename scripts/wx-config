@@ -18,6 +18,9 @@ release=3.2
 config=openlayout-unicode-static-$release
 
 cxxflags="-I$prefix/lib/wx/include/$config -I$prefix/include/wx-$release -include wx/openlayout/amigacompat.h -D__WXOPENLAYOUT__ -D_FILE_OFFSET_BITS=64"
+# a program on openwxtoolkit.library leaves A4 to the wx module's code
+# (src/library/wxtoolkit_library.h)
+[ "${WXTK_SHARED:-0}" = 1 ] && cxxflags="$cxxflags -ffixed-a4"
 want_libs=0
 gui=0
 base=0

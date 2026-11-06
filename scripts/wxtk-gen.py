@@ -1,29 +1,35 @@
 #!/usr/bin/env python3
 """wxtk-gen.py: the tables that join a program, openwxtoolkit.library and
-the wx module (src/library/wxtoolkit_library.h).
+the wx module (src/library/wxtoolkit_library.h). scripts/build-library.sh
+runs it in these steps:
 
-  wxtk-gen.py scan OUTDIR ARCHIVE... [-- EXTRA.o...]
-      unpacks the toolkit's archives (in link order), picks the members the
-      module is linked from (a member whose strong symbols an earlier one
-      already defines is left out, as a static link would never use it: the
-      GUI build's copies of wxBase files win), and writes
-        members.rsp   the members, for the module's link
-        symbols.json  what they define and what they leave undefined
-        rtprobe.s     a table naming every symbol the module needs from a
-                      program's C library, to link a probe program with
-  wxtk-gen.py prune OUTDIR LINK.log
-      after a probe program's link (--no-demangle) that named what nothing
-      defines: those symbols get trapping stand-ins in the module instead of
-      being imports, and the three files are written again
+  wxtk-gen.py scan OUTDIR ARCHIVE...
+      unpacks the toolkit's archives (built -fbaserel32, in link order) and
+      picks the members the module is linked from: a member whose own
+      symbols an earlier archive already gives is left out, as a static link
+      would never take it (the GUI build's copies of wxBase files win).
+      Writes members.rsp (for the links) and members.json.
+  wxtk-gen.py link OUTDIR MOD1.t MOD1.log
+      after a first link of the module (the members, the C++ runtime whole,
+      no C library): MOD1.t is its symbol table (objdump -t), MOD1.log its
+      linker's complaints (--no-demangle). What it defines is what the
+      module gives; what it lacks is what it takes from a program's C
+      library. Writes state.json and rtprobe.s, a table naming each import,
+      to link a probe program with.
+  wxtk-gen.py absent OUTDIR PROBE0.log
+      after a probe link that may fail: the imports no C library has get a
+      stand-in in the module that traps if used (as a static link of a
+      program using them would fail), and rtprobe.s is written again.
   wxtk-gen.py emit OUTDIR RTPROBE.t
-      reads the probe program's symbol table (objdump -t: where each C
-      library symbol lives, so code from data) and writes
-        mod_tables.s  the module's header, its export table, the jumps and
-                      stand-ins for its C library imports, and the heads of
-                      libnix's lists (the first object of the module's link)
-        app_tables.s  a program's side: a jump for each wx call, a stand-in
-                      for each piece of wx data, its C library table, and
-                      struct WXTKApp (__wxtk_app)
+      reads the probe program's symbol table (where each import lives: code
+      or data) and writes
+        mod_tables.s  the module's first object: the BRA.W over its header,
+                      its export table, a slot and a stub for each C library
+                      call it makes, a copy for each C library variable, the
+                      heads of libnix's lists, the start of a thread
+        app_tables.s  a program's side: a stub for each module call, a
+                      stand-in for each piece of module data, its C library
+                      table, and struct WXTKApp (__wxtk_app)
         exports.txt, imports.txt   the lists, for people
 Copyright (c) 2026 AmiCradle Team
 """
@@ -36,12 +42,16 @@ import sys
 OBJDUMP = os.environ.get("OBJDUMP", "m68k-amigaos-objdump")
 AR = os.environ.get("AR", "m68k-amigaos-ar")
 MAGIC = 0x5758544B
-FORMAT = 1
-# symbols that are the module's own business, never exported or imported
+FORMAT = 2
+# the module's own business, never given to a program
 PRIVATE = re.compile(r"^(___CTOR_LIST__|___DTOR_LIST__|___INIT_LIST__|___EXIT_LIST__|___LIB_LIST__|"
                      r"__EH_FRAME_BEGINS__|__EH_FRAME_OBJECTS__|__EH_FRAME_BEGIN__|__EH_FRAME_OBJECT__|"
-                     r"_wxtk_module_.*|___wxtk_.*)$")
-TYPEDATA = re.compile(r"^__ZT[VISTC]")      # vtables, typeinfo and their names: data in .rodata
+                     r"___a4_init|___data_size|___datadata_relocs|___dso_handle|"
+                     r"__wxtk_.*|___wxtk_.*|_wxtk_.*|___wrap_.*|___real_.*)$")
+TYPEDATA = re.compile(r"^__ZT[VISTC]")      # vtables, typeinfo and their names: constants
+ROSECS = (".data.rel.ro", ".rodata", ".gcc_except_table")
+# the C library calls the module keeps for itself (wxtk_module_rt.c)
+WRAPPED = ("pthread_create", "pthread_once", "pthread_key_create")
 
 
 def fnv(name):
@@ -51,41 +61,47 @@ def fnv(name):
     return h
 
 
-def objdump(path):
-    """(sections {name: size}, symbols [(name, value, flags, section)])"""
-    out = subprocess.run([OBJDUMP, "-h", "-t", path], capture_output=True, text=True, check=True).stdout
-    secs, syms = {}, []
-    mode = None
-    for line in out.splitlines():
-        if line.startswith("Sections:"):
-            mode = "h"; continue
-        if line.startswith("SYMBOL TABLE:"):
-            mode = "t"; continue
+def parse_syms(text):
+    """[(name, value, flags, section)] from objdump -t"""
+    syms = []
+    for line in text.splitlines():
         t = line.split()
-        if mode == "h" and len(t) >= 7 and t[0].isdigit():
+        if len(t) >= 5 and re.match(r"^[0-9a-f]{8}$", t[0]):
+            syms.append((t[-1], int(t[0], 16), "".join(t[1:-4]), t[-4]))
+    return syms
+
+
+def objdump(path):
+    """(sections {name: size}, symbols)"""
+    out = subprocess.run([OBJDUMP, "-h", "-t", path], capture_output=True, text=True, check=True).stdout
+    secs = {}
+    head, _, table = out.partition("SYMBOL TABLE:")
+    for line in head.splitlines():
+        t = line.split()
+        if len(t) >= 7 and t[0].isdigit():
             secs[t[1]] = int(t[2], 16)
-        elif mode == "t" and len(t) >= 5 and re.match(r"^[0-9a-f]{8}$", t[0]):
-            # value [flags...] section size type name
-            name, sec = t[-1], t[-4]
-            flags = "".join(t[1:-4])
-            syms.append((name, int(t[0], 16), flags, sec))
-    return secs, syms
+    return secs, parse_syms(table)
 
 
-BASESECS = (".text", ".data", ".bss", ".rodata")
+def undefined_in(log):
+    """the symbols a link's complaints say nothing defines"""
+    out = set()
+    for line in open(log, errors="replace"):
+        m = re.search(r"undefined reference to [`'\"]([^'`\"]+)['`\"]", line)
+        if m:
+            out.add(m.group(1))
+    return out
 
+
+def as_linked(names, wanted):
+    """ld names a symbol with or without its leading underscore"""
+    return {n for n in wanted if n in names or n[1:] in names}
+
+
+# ---- scan ---------------------------------------------------------------------------
 
 def member_info(m, arch):
-    """what one member defines and leaves undefined"""
     secs, syms = objdump(m)
-    lists = [s for s in secs if s.startswith((".list___INIT", ".list___EXIT", ".dlist___LIB"))]
-    # sizes of data symbols: to the next symbol in the section, or its end
-    bysec = {}
-    for name, val, flags, sec in syms:
-        if sec not in ("*UND*", "*ABS*", "*COM*"):
-            bysec.setdefault(sec, []).append(val)
-    for v in bysec.values():
-        v.sort()
     defs, undef, linkonce = {}, set(), set()
     for name, val, flags, sec in syms:
         if sec == "*UND*":
@@ -93,22 +109,15 @@ def member_info(m, arch):
             continue
         if sec == "*ABS*" or not ("g" in flags or "w" in flags) or PRIVATE.match(name):
             continue
-        if sec == "*COM*":
-            kind, size = "data", val
-        else:
-            code = sec.startswith(".text") and not TYPEDATA.match(name)
-            kind = "code" if code else "data"
-            later = [x for x in bysec[sec] if x > val]
-            size = (min(later) if later else secs.get(sec, val + 4)) - val
-            if sec not in BASESECS:
-                linkonce.add(name)      # an inline function's or template's own section
-        weak = "w" in flags and "g" not in flags
-        defs[name] = {"kind": kind, "weak": weak, "size": max(size, 2)}
-    return {"path": m, "arch": arch, "defs": defs, "undef": sorted(undef),
-            "linkonce": sorted(linkonce), "lists": lists}
+        ro = sec.startswith(ROSECS) or bool(TYPEDATA.match(name))
+        code = sec.startswith(".text") and not TYPEDATA.match(name)
+        if sec not in ("*COM*", ".text", ".data", ".bss", ".rodata"):
+            linkonce.add(name)                  # an inline function's or template's own section
+        defs[name] = {"code": code, "ro": ro, "weak": "w" in flags and "g" not in flags}
+    return {"path": m, "arch": arch, "defs": defs, "undef": sorted(undef), "linkonce": sorted(linkonce)}
 
 
-def scan(outdir, archives, extras):
+def scan(outdir, archives):
     xdir = os.path.join(outdir, "x")
     members = []
     for i, a in enumerate(archives):
@@ -119,104 +128,109 @@ def scan(outdir, archives, extras):
         if len(set(names)) != len(names):
             sys.exit("wxtk-gen: %s has members of the same name" % a)
         members += [(os.path.join(d, n), i) for n in names]
-    members += [(e, -1) for e in extras]
     info = [member_info(m, i) for m, i in members]
     # a symbol two members of one archive both define strongly is an inline
-    # function or template (one copy per object, the linker keeps one): it
+    # function or template (a copy in each object; the linker keeps one): it
     # never decides which member a link takes
-    seen, shared = {}, set()
+    seen, shared = set(), set()
     for mi in info:
         for n, d in mi["defs"].items():
-            if d["weak"]:
-                continue
-            k = (mi["arch"], n)
-            if k in seen:
-                shared.add(n)
-            seen[k] = 1
-    for mi in info:
-        mi["shared"] = sorted(shared.intersection(mi["defs"]) | set(mi["linkonce"]))
-    # a member whose own strong symbols an earlier archive already gives is
-    # left out, as a static link would never take it: the GUI build's copies
-    # of wxBase files win
+            if not d["weak"]:
+                if (mi["arch"], n) in seen:
+                    shared.add(n)
+                seen.add((mi["arch"], n))
     taken, cur, cur_arch = set(), set(), None
     chosen, skipped = [], []
     for mi in info:
         if mi["arch"] != cur_arch:
             taken |= cur
             cur, cur_arch = set(), mi["arch"]
-        own = {n for n, d in mi["defs"].items() if not d["weak"]} - set(mi["shared"])
-        if own & taken and mi["arch"] >= 0:
+        own = {n for n, d in mi["defs"].items() if not d["weak"]} - shared - set(mi["linkonce"])
+        if own & taken:
             skipped.append(os.path.basename(mi["path"]))
             continue
         cur |= own
+        for n in mi["defs"]:
+            if n in shared or n in mi["linkonce"]:
+                mi["defs"][n]["weak"] = True
         chosen.append(mi)
+    with open(os.path.join(outdir, "members.rsp"), "w") as f:
+        f.write("\n".join(mi["path"] for mi in chosen) + "\n")
     with open(os.path.join(outdir, "members.json"), "w") as f:
         json.dump(chosen, f)
     print("wxtk-gen: %d members (%d left out: %s)" % (len(chosen), len(skipped), " ".join(skipped)))
-    write_selection(outdir, chosen, None)
 
 
-def write_selection(outdir, chosen, missing):
-    """members.rsp, symbols.json and rtprobe.s for these members. missing:
-    what a probe program found nothing defines (wx files for backends this
-    build lacks, as wxPostScriptDC). The module gets a stand-in for each that
-    traps if used, as a static link of a program using them fails."""
-    missing = set(missing or ())
-    defs, undef, lists = {}, set(), set()
+# ---- link: what the module gives and takes -----------------------------------------------
+
+def link(outdir, mod_t, mod_log):
+    chosen = json.load(open(os.path.join(outdir, "members.json")))
+    wx = {}
     for mi in chosen:
-        lists.update(mi["lists"])
-        undef.update(mi["undef"])
-        sh = set(mi["shared"])
         for n, d in mi["defs"].items():
-            d = dict(d, weak=d["weak"] or n in sh)
-            old = defs.get(n)
-            if old and not old["weak"]:
-                continue
-            defs[n] = d
-    allimp = sorted(n for n in undef if n not in defs and not PRIVATE.match(n))
-    imports = [n for n in allimp if n not in missing]
-    absent = [n for n in allimp if n in missing]
-    with open(os.path.join(outdir, "members.rsp"), "w") as f:
-        f.write("\n".join(mi["path"] for mi in chosen) + "\n")
-    with open(os.path.join(outdir, "symbols.json"), "w") as f:
-        json.dump({"exports": defs, "imports": imports, "absent": absent}, f)
+            if n not in wx or wx[n]["weak"]:
+                wx[n] = d
+    syms = parse_syms(open(mod_t).read())
+    bysec = {}
+    for name, val, flags, sec in syms:
+        bysec.setdefault(sec, []).append(val)
+    for v in bysec.values():
+        v.sort()
+    ends = {sec: max(v) + 4 for sec, v in bysec.items()}
+    exports = {}
+    for name, val, flags, sec in syms:
+        if sec in ("*UND*", "*ABS*") or "g" not in flags and "w" not in flags or PRIVATE.match(name):
+            continue
+        d = wx.get(name)
+        code = d["code"] if d else (sec == ".text" and not TYPEDATA.match(name))
+        ro = (d["ro"] if d else False) or bool(TYPEDATA.match(name)) or sec == ".text"
+        later = [x for x in bysec[sec] if x > val]
+        size = (min(later) if later else ends[sec]) - val
+        exports[name] = {"kind": "code" if code else "data",
+                         "own": not code and not ro and sec in (".data", ".bss"),
+                         "weak": d["weak"] if d else ("w" in flags and "g" not in flags),
+                         "size": max(min(size, 1 << 20), 2)}
+    missing = undefined_in(mod_log)
+    imports = sorted("_" + n for n in missing if not PRIVATE.match("_" + n))
+    for n in imports:
+        if n in exports:
+            sys.exit("wxtk-gen: %s is both given and taken" % n)
+    with open(os.path.join(outdir, "state.json"), "w") as f:
+        json.dump({"exports": exports, "imports": imports, "absent": []}, f)
+    write_probe(outdir, imports)
+    ncode = sum(1 for d in exports.values() if d["kind"] == "code")
+    nown = sum(1 for d in exports.values() if d["own"])
+    print("wxtk-gen: the module gives %d (%d calls, %d data, %d of them each program's own) and takes %d"
+          % (len(exports), ncode, len(exports) - ncode, nown, len(imports)))
+
+
+def write_probe(outdir, imports):
     with open(os.path.join(outdir, "rtprobe.s"), "w") as f:
         f.write("\t.text\n\t.globl _wxtk_rtprobe\n_wxtk_rtprobe:\n")
         for n in imports:
             f.write("\t.long %s\n" % n)
-    nweak = sum(1 for d in defs.values() if d["weak"])
-    ncode = sum(1 for d in defs.values() if d["kind"] == "code")
-    if absent:
-        print("wxtk-gen: %d symbols nothing defines, trapping stand-ins in the module: %s"
-              % (len(absent), " ".join(absent)))
-    print("wxtk-gen: %d members, %d exports (%d code, %d data, %d weak), %d imports"
-          % (len(chosen), len(defs), ncode, len(defs) - ncode, nweak, len(imports)))
-    if lists:
-        print("wxtk-gen: warning: members carry libnix lists the module doesn't run: %s" % " ".join(sorted(lists)))
 
 
-def prune(outdir, missing_txt):
-    """after a probe program's link (--no-demangle) named what nothing
-    defines ("undefined reference to `X'"): those become the module's own
-    trapping stand-ins instead of imports"""
-    missing = set()
-    for line in open(missing_txt, errors="replace"):
-        m = re.search(r"undefined reference to [`'\"]([^'`\"]+)['`\"]", line)
-        if m:
-            missing.add(m.group(1))
-            missing.add("_" + m.group(1))
-    chosen = json.load(open(os.path.join(outdir, "members.json")))
-    write_selection(outdir, chosen, missing)
+def absent(outdir, probe_log):
+    st = json.load(open(os.path.join(outdir, "state.json")))
+    missing = undefined_in(probe_log)
+    gone = [n for n in st["imports"] if n in missing or n[1:] in missing]
+    st["imports"] = [n for n in st["imports"] if n not in gone]
+    st["absent"] = gone
+    with open(os.path.join(outdir, "state.json"), "w") as f:
+        json.dump(st, f)
+    write_probe(outdir, st["imports"])
+    if gone:
+        print("wxtk-gen: no C library has these, so they trap in the module: %s" % " ".join(gone))
 
+
+# ---- emit -----------------------------------------------------------------------------
 
 def emit(outdir, rtprobe_t):
-    sym = json.load(open(os.path.join(outdir, "symbols.json")))
-    defs, imports = sym["exports"], sym["imports"]
-    # where the probe program's C library put each import
-    _, syms = objdump(rtprobe_t) if not rtprobe_t.endswith(".t") else (None, parse_t(rtprobe_t))
-    where = {}
-    bysec = {}
-    for name, val, flags, sec in syms:
+    st = json.load(open(os.path.join(outdir, "state.json")))
+    defs, imports, gone = st["exports"], st["imports"], st["absent"]
+    where, bysec = {}, {}
+    for name, val, flags, sec in parse_syms(open(rtprobe_t).read()):
         if sec in ("*UND*", "*ABS*"):
             continue
         where.setdefault(name, (sec, val))
@@ -228,33 +242,46 @@ def emit(outdir, rtprobe_t):
         if n not in where:
             sys.exit("wxtk-gen: the probe program doesn't define %s" % n)
         sec, val = where[n]
-        if sec.startswith(".text") and not TYPEDATA.match(n):
+        if sec == ".text" and not TYPEDATA.match(n):
             impc.append(n)
         else:
             later = [x for x in bysec[sec] if x > val]
-            size = (min(later) - val) if later else 4096
-            impd.append((n, min(max(size + 16, 16), 65536)))
+            size = (min(later) - val) if later else 4
+            impd.append((n, max(min(size, 4096), 4)))
+    impc.sort(key=fnv)
+    impd.sort(key=lambda x: fnv(x[0]))
 
     exports = sorted(defs, key=fnv)
     hashes = [fnv(n) for n in exports]
     for a, b, n in zip(hashes, hashes[1:], exports[1:]):
         if a == b:
             sys.exit("wxtk-gen: two exports share a hash: %s" % n)
-    rth = sorted(set(fnv(n) for n in imports))
-    if len(rth) != len(imports):
+    if len(set(fnv(n) for n in imports)) != len(imports):
         sys.exit("wxtk-gen: two imports share a hash")
     buildid = fnv("\n".join(exports) + "\n--\n" + "\n".join(imports))
 
-    # ---- the module's tables: the first object of its link -----------------
+    # ---- the module's first object (built -fbaserel32) -----------------------
     m = []
     w = m.append
     w("| wx.module's tables (wxtk-gen.py)\n\t.text\n\t.globl _wxtk_module_start\n_wxtk_module_start:\n")
-    w("\tmoveq #-1,d0\n\trts\n")
+    w("\tbra.w Lself\n")
     w("\t.long 0x%08x,%d,0x%08x\n" % (MAGIC, FORMAT, buildid))
-    w("\t.long %d,Lexph,Lexpa\n" % len(exports))
-    w("\t.long %d,Limpc,Limpch\n" % len(impc))
-    w("\t.long %d,Limpd,Limpde,Limpdo,Limpdh\n" % len(impd))
-    w("\t.long _wxtk_module_init,_wxtk_module_exit,Lnames\n")
+    w("\t.long _wxtk_module_entry,_wxtk_module_exit\n")
+    w("\t.long ___a4_init,___data_size,___datadata_relocs\n")
+    w("\t.long %d,Lexph,Lexpa,Lexpo\n" % len(exports))
+    w("\t.long %d,Limpch,Lslots\n" % len(impc))
+    w("\t.long %d,Limpdh,Limpdp,Limpds\n" % len(impd))
+    w("\t.long Lnames\n")
+    # run as a program, the module does nothing
+    w("Lself:\tmoveq #-1,d0\n\trts\n")
+    # a new thread (wxtk_module_rt.c's pthread_create): A4 from its start
+    # record, the caller's back after
+    w("\t.globl _wxtk_thread_start\n_wxtk_thread_start:\n")
+    w("\tmove.l a4,-(sp)\n\tmove.l 8(sp),a0\n\tmove.l 8(a0),a4\n\tmove.l a0,-(sp)\n"
+      "\tjsr _wxtk_thread_run\n\taddq.l #4,sp\n\tmove.l (sp)+,a4\n\trts\n")
+    # a C library call: through its slot in this program's copy
+    for i, n in enumerate(impc):
+        w("\t.globl %s\n%s:\tmove.l __wxtk_s%d:L(a4),a0\n\tjmp (a0)\n" % (n, n, i))
     w("\t.align 2\nLexph:\n")
     for h in hashes:
         w("\t.long 0x%08x\n" % h)
@@ -267,30 +294,30 @@ def emit(outdir, rtprobe_t):
     w("Limpdh:\n")
     for n, _ in impd:
         w("\t.long 0x%08x\n" % fnv(n))
-    w("Limpdo:\n")
-    off = 0
-    for n, size in impd:
-        w("\t.long %d\n" % off)
-        off += size
-    w("Limpc:\n")
-    for n in impc:
-        w("\t.globl %s\n%s:\n\t.short 0x4ef9\n\t.long 0\n" % (n, n))
+    w("Limpdp:\n")
+    for n, _ in impd:
+        w("\t.long %s\n" % n)
+    w("Limpds:\n")
+    for _, s in impd:
+        w("\t.long %d\n" % s)
+    w("Lexpo:\n")
+    for i in range(0, len(exports), 16):
+        w("\t.byte %s\n" % ",".join("1" if defs[n]["own"] else "0" for n in exports[i:i + 16]))
     w("Lnames:\n")
     for n in impc + [x for x, _ in impd]:
         w("\t.asciz \"%s\"\n" % n)
-    # what nothing defines: an ILLEGAL instruction, in data so the same
+    w("\t.data\n\t.align 2\nLslots:\n")
+    for i in range(len(impc)):
+        w("__wxtk_s%d:\t.long 0\n" % i)
+    # what no C library has: an ILLEGAL instruction, in data so the same
     # stand-in serves a call and a read
-    w("\t.data\n\t.align 2\n")
-    for n in sym.get("absent", []):
+    for n in gone:
         w("\t.globl %s\n%s:\t.short 0x4afc\n\t.skip 62\n" % (n, n))
-    w("\t.text\n")
-    w("\t.align 2\n\t.bss\n\t.align 2\nLimpd:\n")
-    for n, size in impd:
-        w("\t.globl %s\n%s:\t.skip %d\n" % (n, n, size))
-    w("Limpde:\t.skip 4\n")
+    w("\t.bss\n\t.align 2\n")
+    for n, s in impd:
+        w("\t.globl %s\n%s:\t.skip %d\n" % (n, n, (s + 3) & ~3))
     # libnix's lists: a zero head each, the members' entries, then the end
-    # markers (as gfopenrtg's module_start.S): C++ constructors and
-    # destructors, and the EH frames each object registers
+    # markers (as gfopenrtg's module_start.S)
     for sec, name in ((".list___CTOR_LIST__", "___CTOR_LIST__"), (".list___DTOR_LIST__", "___DTOR_LIST__"),
                       (".list___INIT_LIST__", "___INIT_LIST__"), (".list___EXIT_LIST__", "___EXIT_LIST__"),
                       (".list___EH_FRAME_BEGINS__", "__EH_FRAME_BEGINS__"),
@@ -306,12 +333,12 @@ def emit(outdir, rtprobe_t):
     a = []
     w = a.append
     w("| a program's side of openwxtoolkit.library (wxtk-gen.py)\n\t.text\n\t.align 2\n")
-    # a wx call: a jump the library points at the module. Weak, so the
-    # program's own copy of an inline function or template (or its own zlib)
-    # is the one it uses.
+    # a module call: A4 on this program's copy, then a jump the library
+    # points at the module. Weak, so the program's own copy of an inline
+    # function or template is the one it uses.
     w("Lstubs:\n")
     for n in code:
-        w("\t.weak %s\n%s:\n\t.short 0x4ef9\n\t.long 0\n" % (n, n))
+        w("\t.weak %s\n%s:\n\t.short 0x2879\n\t.long ___wxtk_a4\n\t.short 0x4ef9\n\t.long 0\n" % (n, n))
     w("\t.align 2\nLcodeh:\n")
     for n in code:
         w("\t.long 0x%08x\n" % fnv(n))
@@ -319,7 +346,7 @@ def emit(outdir, rtprobe_t):
     off = 0
     places = []
     for n in data:
-        places.append((n, off))
+        places.append(n)
         w("\t.long %d\n" % off)
         off += (defs[n]["size"] + 4 + 3) & ~3
     w("Lphh:\n")
@@ -333,56 +360,52 @@ def emit(outdir, rtprobe_t):
     w("Lrta:\n")
     for n in rt:
         w("\t.long %s\n" % n)
-    # wx data: stand-ins. A piece of data wx defines weak (a template's
-    # static member, an inline function's static, a vtable or typeinfo
-    # emitted where used) is strong here, so the program's copies give way
-    # to the module's one; the rest is weak, as the jumps are.
+    # module data: stand-ins. A piece of data the module has weak (a
+    # template's static member, an inline function's static, a vtable or
+    # typeinfo emitted where used) is strong here, so the program's copies
+    # give way to the module's one; the rest is weak, as the stubs are.
     w("\t.bss\n\t.align 2\nLph:\n")
-    for n, o in places:
+    for n in places:
         w("\t%s %s\n%s:\t.skip %d\n" % (".globl" if defs[n]["weak"] else ".weak", n, n,
                                           (defs[n]["size"] + 4 + 3) & ~3))
     w("Lphe:\t.skip 4\n")
-    w("\t.data\n\t.align 2\n\t.globl ___wxtk_app\n___wxtk_app:\n")
+    w("\t.data\n\t.align 2\n\t.globl ___wxtk_a4\n___wxtk_a4:\t.long 0\n")
+    w("\t.globl ___wxtk_app\n___wxtk_app:\n")
     w("\t.long 0x%08x,%d,0x%08x\n" % (MAGIC, FORMAT, buildid))
     w("\t.long %d,Lstubs,Lcodeh\n" % len(code))
     w("\t.long %d,Lph,Lphe,Lphoff,Lphh\n" % len(data))
     w("\t.long %d,Lrth,Lrta\n" % len(rt))
     w("\t.long 0,0,0\n")                      # seglist, dirlock, name
-    w("\t.long 0,0,0\n")                      # module, header, fixed
+    w("\t.long 0,0,0,0\n")                    # a4, copy, header, fixed
     w("\t.skip 200\n")                        # error
     open(os.path.join(outdir, "app_tables.s"), "w").write("".join(a))
+
     with open(os.path.join(outdir, "exports.txt"), "w") as f:
         for n in exports:
-            f.write("%08x %s %s%s %d\n" % (fnv(n), n, defs[n]["kind"], " weak" if defs[n]["weak"] else "", defs[n]["size"]))
+            d = defs[n]
+            f.write("%08x %s %s%s%s %d\n" % (fnv(n), n, d["kind"], " own" if d["own"] else "",
+                                            " weak" if d["weak"] else "", d["size"]))
     with open(os.path.join(outdir, "imports.txt"), "w") as f:
         for n in impc:
-            f.write("%08x %s code\n" % (fnv(n), n))
+            f.write("%08x %s call\n" % (fnv(n), n))
         for n, s in impd:
-            f.write("%08x %s data %d\n" % (fnv(n), n, s))
-    print("wxtk-gen: build id %08x; program side: %d calls, %d data (%d bytes of stand-ins), %d C library symbols; "
-          "module imports %d calls, %d data" % (buildid, len(code), len(data), off, len(rt), len(impc), len(impd)))
-
-
-def parse_t(path):
-    syms = []
-    for line in open(path):
-        t = line.split()
-        if len(t) >= 5 and re.match(r"^[0-9a-f]{8}$", t[0]):
-            syms.append((t[-1], int(t[0], 16), "".join(t[1:-4]), t[-4]))
-    return syms
+            f.write("%08x %s copy %d\n" % (fnv(n), n, s))
+        for n in gone:
+            f.write("%08x %s traps\n" % (fnv(n), n))
+    print("wxtk-gen: build id %08x; a program: %d stubs (%d bytes), %d stand-ins (%d bytes of BSS), %d C library symbols; "
+          "the module takes %d calls and %d variables, %d trap" % (buildid, len(code), 12 * len(code), len(data), off,
+                                                                 len(rt), len(impc), len(impd), len(gone)))
 
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[1] == "scan":
-        rest = sys.argv[3:]
-        extras = []
-        if "--" in rest:
-            k = rest.index("--")
-            rest, extras = rest[:k], rest[k + 1:]
-        scan(sys.argv[2], rest, extras)
-    elif len(sys.argv) == 4 and sys.argv[1] == "prune":
-        prune(sys.argv[2], sys.argv[3])
-    elif len(sys.argv) == 4 and sys.argv[1] == "emit":
-        emit(sys.argv[2], sys.argv[3])
+    a = sys.argv
+    if len(a) >= 3 and a[1] == "scan":
+        scan(a[2], a[3:])
+    elif len(a) == 5 and a[1] == "link":
+        link(a[2], a[3], a[4])
+    elif len(a) == 4 and a[1] == "absent":
+        absent(a[2], a[3])
+    elif len(a) == 4 and a[1] == "emit":
+        emit(a[2], a[3])
     else:
         sys.exit(__doc__)

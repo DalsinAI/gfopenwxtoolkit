@@ -3,11 +3,13 @@
  * don't carry it. wxtoolkit_library.h says how a program, the library and
  * the wx module fit together.
  *
- * WXTK_Bind loads LIBS:openwxtoolkit/wx.module for the calling program (a
- * copy each: step 1), relocates it, points its C library calls and data at
- * the program's, and then turns the program's own jumps and data references
- * to the module. Everything runs on the caller's task; the library keeps no
- * state of its own past dos.library, so any number of programs bind at once.
+ * The library loads LIBS:openwxtoolkit/wx.module once (LoadSeg), the first
+ * time a program binds, and keeps it while any program has it. WXTK_Bind
+ * gives the calling program its own copy of the module's data, fills in the
+ * module's C library slots from the program's, runs the module's start with
+ * A4 on that copy, and then turns the program's own stubs and data
+ * references to the module. WXTK_Unbind runs the module's end on the copy
+ * and frees it. Each runs on the caller's task.
  *
  * Built -nostdlib: exec and dos only, through the base.
  * Copyright (c) 2026 AmiCradle Team
@@ -17,6 +19,7 @@
 #include <exec/memory.h>
 #include <exec/resident.h>
 #include <exec/libraries.h>
+#include <exec/semaphores.h>
 #include <dos/dos.h>
 #include <dos/doshunks.h>
 #include <proto/exec.h>
@@ -33,6 +36,9 @@ struct WXTKBase {
     BPTR seglist;
     struct ExecBase *sys;
     struct DosLibrary *dos;
+    struct SignalSemaphore lock;        /* the module and its users */
+    BPTR module;                        /* wx.module, loaded once */
+    ULONG users;                        /* programs bound to it */
 };
 
 #define EXEC(b) struct ExecBase *SysBase = (b)->sys
@@ -73,6 +79,9 @@ static struct Library *lib_init(REG(d0, struct WXTKBase *base), REG(a0, BPTR seg
     base->sys = sys;
     base->seglist = seglist;
     base->lib.lib_Revision = LIB_REVISION;
+    base->module = 0;
+    base->users = 0;
+    InitSemaphore(&base->lock);
     base->dos = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 37);
     if (!base->dos) {
         FreeMem((UBYTE *)base - base->lib.lib_NegSize, base->lib.lib_NegSize + base->lib.lib_PosSize);
@@ -96,8 +105,9 @@ static BPTR lib_expunge(REG(a6, struct WXTKBase *base))
 {
     EXEC(base);
     BPTR seglist;
-    if (base->lib.lib_OpenCnt) { base->lib.lib_Flags |= LIBF_DELEXP; return 0; }
+    if (base->lib.lib_OpenCnt || base->users) { base->lib.lib_Flags |= LIBF_DELEXP; return 0; }
     seglist = base->seglist;
+    if (base->module) { DOS(base); UnLoadSeg(base->module); base->module = 0; }
     CloseLibrary((struct Library *)base->dos);
     Remove(&base->lib.lib_Node);
     FreeMem((UBYTE *)base - base->lib.lib_NegSize, base->lib.lib_NegSize + base->lib.lib_PosSize);
@@ -355,81 +365,111 @@ static BPTR open_rel(struct DosLibrary *DOSBase, BPTR dir, CONST_STRPTR name)
 
 /* ---- binding --------------------------------------------------------------------- */
 
+/* fn() with A4 = a4, the caller's A4 back after; the result in D0. */
+static LONG call_a4(APTR fn, APTR a4)
+{
+    register LONG r __asm("d0");
+    register APTR f __asm("a1") = fn;
+    register APTR v __asm("d1") = a4;
+    __asm volatile ("move.l %%a4,-(%%sp)\n\tmove.l %2,%%a4\n\tjsr (%1)\n\tmove.l (%%sp)+,%%a4"
+                    : "=r"(r), "+r"(f), "+r"(v) : : "a0", "cc", "memory");
+    return r;
+}
+
+/* The module, loaded once; NULL and a message when it can't be. */
+static struct WXTKModuleHeader *module_header(struct WXTKBase *base, struct WXTKApp *app)
+{
+    DOS(base);
+    struct WXTKModuleHeader *mh;
+    if (!base->module) {
+        base->module = LoadSeg((CONST_STRPTR)WXTK_MODULE);
+        if (!base->module) { say(app, "openwxtoolkit: can't load " WXTK_MODULE, 0, 0, -1); return NULL; }
+    }
+    mh = (struct WXTKModuleHeader *)((UBYTE *)BADDR(base->module) + 8);
+    if (*(UWORD *)((UBYTE *)BADDR(base->module) + 4) != 0x6000 || mh->magic != WXTK_MAGIC || mh->format != WXTK_FORMAT) {
+        say(app, "openwxtoolkit: " WXTK_MODULE " is not a wx module for this version of the library", 0, 0, -1);
+        if (!base->users) { UnLoadSeg(base->module); base->module = 0; }
+        return NULL;
+    }
+    return mh;
+}
+
 static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *base))
 {
     EXEC(base);
-    DOS(base);
     struct rd r;
-    struct walk w;
     struct WXTKModuleHeader *mh;
     APTR *to = NULL;
-    UBYTE *buf = NULL;
+    UBYTE *buf = NULL, *copy = NULL, *orig;
     BPTR fh = 0;
-    ULONG i, nrt;
+    ULONG i, delta;
     LONG rc = 20;
+    int counted = 0;
 
     app->error[0] = 0;
-    app->module = 0;
+    app->copy = NULL;
+    app->a4 = NULL;
+    app->header = NULL;
     app->fixed = 0;
     if (app->magic != WXTK_MAGIC || app->format != WXTK_FORMAT) { say(app, "openwxtoolkit: a program for another version of the library", 0, 0, -1); return 20; }
-    buf = AllocVec(RDBUF, MEMF_ANY);
-    if (!buf) { say(app, "openwxtoolkit: out of memory", 0, 0, -1); return 20; }
 
-    /* 1. the module, a copy for this program */
-    fh = Open((CONST_STRPTR)WXTK_MODULE, MODE_OLDFILE);
-    if (!fh) { say(app, "openwxtoolkit: can't open " WXTK_MODULE, 0, 0, -1); goto out; }
-    r.sys = base->sys; r.dos = base->dos; r.fh = fh; r.buf = buf; r.len = r.pos = 0; r.bad = 0;
-    w.app = app; w.base = NULL; w.size = NULL; w.nh = 0; w.load = 1; w.fixed = 0;
-    {
-        CONST_STRPTR keep = app->name;
-        app->name = (CONST_STRPTR)WXTK_MODULE;
-        i = (ULONG)walk_file(&r, &w, SysBase);
-        app->name = keep;
-    }
-    if (w.base && w.nh) app->module = MKBADDR((ULONG *)w.base[0] - 1);
-    if (!i) goto out;
-    mh = (struct WXTKModuleHeader *)(w.base[0] + 4);
-    if (mh->magic != WXTK_MAGIC || mh->format != WXTK_FORMAT) { say(app, "openwxtoolkit: " WXTK_MODULE " is not a wx module of this version", 0, 0, -1); goto out; }
-    app->header = mh;
+    ObtainSemaphore(&base->lock);
+    mh = module_header(base, app);
+    if (mh) { base->users++; counted = 1; }
+    ReleaseSemaphore(&base->lock);
+    if (!mh) return 20;
 
-    /* 2. the module's C library calls and data: the program's */
-    nrt = mh->nimpc > mh->nimpd ? mh->nimpc : mh->nimpd;
-    to = AllocVec((nrt + app->ndata + 1) * sizeof(APTR), MEMF_ANY);
-    if (!to) { say(app, "openwxtoolkit: out of memory", 0, 0, -1); goto out; }
+    /* 1. the program's copy of the module's data */
+    orig = mh->a4_init - WXTK_A4_OFFSET;
+    copy = AllocMem(mh->data_size, MEMF_ANY);
+    if (!copy) { say(app, "openwxtoolkit: out of memory for the wx module's data (bytes) ", 0, mh->data_size, 0); goto out; }
+    CopyMem(orig, copy, mh->data_size);
+    delta = (ULONG)copy - (ULONG)orig;
+    for (i = 1; i <= mh->relocs[0]; i++) *(ULONG *)(copy + mh->relocs[i]) += delta;
+#define IN_COPY(p) ((UBYTE *)(p) - orig + copy)
+
+    /* 2. its C library: the program's */
     {
         const char *nm = mh->names;
         for (i = 0; i < mh->nimpc; i++) {
             LONG k = find(app->rt_hash, app->nrt, mh->impc_hash[i]);
             if (k < 0) { say(app, "openwxtoolkit: the program lacks a C library call the wx module needs: ", nm, 0, -1); goto out; }
-            *(APTR *)(mh->impc_stubs + 3 * i + 1) = app->rt_addr[k];
+            *(APTR *)IN_COPY(&mh->impc_slot[i]) = app->rt_addr[k];
             while (*nm++) {}
         }
         for (i = 0; i < mh->nimpd; i++) {
             LONG k = find(app->rt_hash, app->nrt, mh->impd_hash[i]);
             if (k < 0) { say(app, "openwxtoolkit: the program lacks C library data the wx module needs: ", nm, 0, -1); goto out; }
-            to[i] = app->rt_addr[k];
+            CopyMem(app->rt_addr[k], IN_COPY(mh->impd_place[i]), mh->impd_size[i]);
             while (*nm++) {}
         }
     }
-    rd_rewind(&r);
-    w.load = 0; w.lo = mh->impd_base; w.hi = mh->impd_end; w.off = mh->impd_off; w.noff = mh->nimpd; w.to = (const APTR *)to;
-    if (mh->nimpd && !walk_file(&r, &w, SysBase)) goto out;
-    Close(fh); fh = 0;
 
-    /* 3. the program's wx calls and data: the module's */
+    /* 3. the module's start, on the copy */
+    if (call_a4((APTR)mh->entry, copy + WXTK_A4_OFFSET)) { say(app, "openwxtoolkit: the wx module didn't start", 0, 0, -1); goto out; }
+    app->copy = copy;
+    app->a4 = copy + WXTK_A4_OFFSET;
+    app->header = mh;
+
+    /* 4. the program's stubs and data: the module's */
     for (i = 0; i < app->ncode; i++) {
         LONG k = find(mh->exp_hash, mh->nexp, app->code_hash[i]);
         if (k < 0) { say(app, "openwxtoolkit: the wx module lacks a call the program makes (hash) ", 0, app->code_hash[i], 1); goto out; }
-        *(APTR *)(app->code_stubs + 3 * i + 1) = mh->exp_addr[k];
-    }
-    for (i = 0; i < app->ndata; i++) {
-        LONG k = find(mh->exp_hash, mh->nexp, app->ph_hash[i]);
-        to[i] = k < 0 ? NULL : mh->exp_addr[k];   /* a missing one is an error only where the program uses it */
+        *(APTR *)(app->code_stubs + 6 * i + 4) = mh->exp_addr[k];
     }
     if (app->ndata) {
         struct walk p;
         ULONG nh = 0;
         BPTR s;
+        to = AllocVec((app->ndata + 1) * sizeof(APTR), MEMF_ANY);
+        if (!to) { say(app, "openwxtoolkit: out of memory", 0, 0, -1); goto out; }
+        for (i = 0; i < app->ndata; i++) {
+            LONG k = find(mh->exp_hash, mh->nexp, app->ph_hash[i]);
+            /* a missing one is an error only where the program uses it */
+            to[i] = k < 0 ? NULL : mh->exp_own[k] ? (APTR)IN_COPY(mh->exp_addr[k]) : mh->exp_addr[k];
+        }
+        buf = AllocVec(RDBUF, MEMF_ANY);
+        if (!buf) { say(app, "openwxtoolkit: out of memory", 0, 0, -1); goto out; }
         for (s = app->seglist; s; s = *(BPTR *)BADDR(s)) nh++;
         p.app = app; p.nh = nh; p.load = 0; p.fixed = 0;
         p.lo = app->ph_base; p.hi = app->ph_end; p.off = app->ph_off; p.noff = app->ndata; p.to = (const APTR *)to;
@@ -443,7 +483,7 @@ static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *bas
         }
         fh = open_rel(base->dos, app->dirlock, app->name);
         if (!fh) { FreeVec(p.base); say(app, "openwxtoolkit: can't read the program's own file: ", (const char *)app->name, 0, -1); goto out; }
-        r.fh = fh; r.len = r.pos = 0; r.bad = 0;
+        r.sys = base->sys; r.dos = base->dos; r.fh = fh; r.buf = buf; r.len = r.pos = 0; r.bad = 0;
         i = (ULONG)walk_file(&r, &p, SysBase);
         FreeVec(p.base);
         if (!i) goto out;
@@ -452,18 +492,27 @@ static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *bas
     CacheClearU();
     rc = 0;
 out:
-    if (fh) Close(fh);
+    if (fh) { DOS(base); Close(fh); }
     if (to) FreeVec(to);
-    if (w.base) FreeVec(w.base);
-    FreeVec(buf);
-    if (rc && app->module) { UnLoadSeg(app->module); app->module = 0; }
+    if (buf) FreeVec(buf);
+    if (rc) {
+        if (app->header) call_a4((APTR)mh->exit, app->a4);
+        if (copy) FreeMem(copy, mh->data_size);
+        app->copy = NULL; app->a4 = NULL; app->header = NULL;
+        if (counted) { ObtainSemaphore(&base->lock); base->users--; ReleaseSemaphore(&base->lock); }
+    }
     return rc;
 }
 
 static void WXTK_Unbind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *base))
 {
-    DOS(base);
-    if (app->module) UnLoadSeg(app->module);
-    app->module = 0;
-    app->header = NULL;
+    EXEC(base);
+    struct WXTKModuleHeader *mh = app->header;
+    if (!mh) return;
+    call_a4((APTR)mh->exit, app->a4);
+    FreeMem(app->copy, mh->data_size);
+    app->copy = NULL; app->a4 = NULL; app->header = NULL;
+    ObtainSemaphore(&base->lock);
+    base->users--;
+    ReleaseSemaphore(&base->lock);
 }

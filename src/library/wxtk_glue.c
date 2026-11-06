@@ -1,11 +1,13 @@
 /*
  * wxtk_glue.c: a program's start-up for openwxtoolkit.library (linked into
  * every program built with wx-config --libs ... and WXTK_SHARED=1). Before the
- * program's own constructors (libnix's init list, priority -10: after its
- * libraries are open, before C++ constructors at -5) it opens the library,
- * which loads the wx module for this program and joins the two
- * (wxtoolkit_library.h); then the module's constructors run. At exit the
- * module goes last: its atexit entry is the first one made.
+ * program's own constructors and EH frames (libnix's init list, priority -6:
+ * after its libraries and stdio are open, before both at -5) it opens the
+ * library, which makes this program's copy of the wx module's data, joins
+ * the two and runs the module's start (wxtoolkit_library.h); __wxtk_a4 is
+ * then A4 for every call into the module. At exit, the module's atexit list
+ * (the program's static destructors are on it too) and destructors run at
+ * the same priority, before the libraries close.
  * Copyright (c) 2026 AmiCradle Team
  */
 #include <exec/types.h>
@@ -21,6 +23,7 @@
 #include "wxtoolkit_library.h"
 
 extern struct WXTKApp __wxtk_app;
+extern APTR __wxtk_a4;
 extern struct WBStartup *_WBenchMsg;
 static struct Library *wxtk_base;
 static char wxtk_progname[256];
@@ -64,7 +67,6 @@ static void wxtk_fail(const char *msg)
 static void wxtk_exit(void)
 {
     struct WXTKApp *app = &__wxtk_app;
-    if (app->header) app->header->exit();
     if (wxtk_base) {
         wxtk_unbind(app);
         CloseLibrary(wxtk_base);
@@ -91,7 +93,7 @@ void __wxtk_init(void)
     wxtk_base = OpenLibrary((CONST_STRPTR)WXTK_LIBNAME, 1);
     if (!wxtk_base) wxtk_fail("This program needs " WXTK_LIBNAME " (GFOpenWX Toolkit) in LIBS:");
     if (wxtk_bind(app)) wxtk_fail(app->error);
-    atexit(wxtk_exit);
-    app->header->init();
+    __wxtk_a4 = app->a4;
 }
-ADD2INIT(__wxtk_init, -10);
+ADD2INIT(__wxtk_init, -6);
+ADD2EXIT(wxtk_exit, -6);
