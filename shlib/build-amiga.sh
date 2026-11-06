@@ -19,9 +19,12 @@ count
 ls -la "$WORK" "$WORK/wxgui" 2>&1 | head -20
 ( while sleep 120; do count; done ) &
 P=$!
-WORK="$WORK" OUT="${OUT:-out}" timeout 820 sh "$HERE/build-amiga.sh"
+# the whole log goes to a file; the job's log gets its short lines' end
+WORK="$WORK" OUT="${OUT:-out}" timeout 820 sh "$HERE/build-amiga.sh" > "$OUTD/build.log" 2>&1
 rc=$?
 kill $P 2>/dev/null
 count
+grep -v -e 'warning' -e '^ *|' -e '^ *[0-9]* |' -e 'In file included' -e '^ *from ' "$OUTD/build.log" | cut -c1-400 | tail -n 120
+grep 'wxtk-gen' "$OUTD/build.log" | cut -c1-3000
 echo "build-amiga.sh exit $rc"
 exit $rc
