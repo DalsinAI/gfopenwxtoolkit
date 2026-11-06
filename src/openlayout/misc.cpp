@@ -229,6 +229,23 @@ void wxOLTextExtent(struct TextFont *tf, unsigned style, const wxString& s, int 
     if ( descent ) *descent = tf->tf_YSize - tf->tf_Baseline - 1;
 }
 
+int wxOLCharWidth(struct TextFont *tf, unsigned style)
+{
+    if ( !tf )
+        tf = wxOLScreenFont();
+    if ( !tf )
+        return 8;
+    struct RastPort rp;
+    InitRastPort(&rp);
+    SetFont(&rp, tf);
+    if ( style )
+        SetSoftStyle(&rp, style, AskSoftStyle(&rp));
+    static const char letters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const int n = sizeof letters - 1;
+    const int w = TextLength(&rp, (STRPTR)letters, n);
+    return w > 0 ? (w + n / 2) / n : tf->tf_XSize;
+}
+
 // ---- the display ---------------------------------------------------------------
 
 namespace
