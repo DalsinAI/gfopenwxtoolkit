@@ -38,7 +38,10 @@ fi
 # changes (the archives, these scripts, the runtime): the whole wx module's
 # links take long, so a run cut short goes on where it stopped.
 # shellcheck disable=SC2086
-KEY=$( (ls -l --time-style=+%s $ARCH; cat "$0" "$HERE/scripts/wxtk-gen.py" "$HERE/src/library/"*; echo "$CF ${WXTK_ARCHIVES:-}") | sha256sum | cut -c1-16)
+# (the key covers what the kept steps are made from: the program's side
+# below them is made again every run)
+KEY=$( (ls -l --time-style=+%s $ARCH; cat "$HERE/scripts/wxtk-gen.py" "$HERE/src/library/wxtk_module_rt.c" "$HERE/src/library/wxtoolkit_library.h"
+        sed -n '/^modlink()/,/^}/p' "$0"; echo "$CF ${WXTK_ARCHIVES:-}") | sha256sum | cut -c1-16)
 if [ "$(cat "$L/.key" 2>/dev/null)" != "$KEY" ]; then rm -rf "$L"; fi
 mkdir -p "$L"; echo "$KEY" > "$L/.key"
 done_() { [ -f "$L/.done-$1" ]; }
@@ -128,6 +131,8 @@ m68k-amigaos-as -m68040 "$L/app_tables.s" -o "$L/wxtoolkit-tables.o"
 m68k-amigaos-gcc $CF -ffixed-a4 -Wall -I"$HERE/src/library" -c "$HERE/src/library/wxtk_glue.c" -o "$L/wxtoolkit-glue.o"
 if [ -d "$OUT/sdk/lib" ] && [ -z "${WXTK_ARCHIVES:-}" ]; then
     cp "$L/wxtoolkit-tables.o" "$L/wxtoolkit-glue.o" "$OUT/sdk/lib/"
+    # (wx-config's WXTK_SHARED=1 answers belong with this glue)
+    cp "$HERE/scripts/wx-config" "$OUT/sdk/bin/wx-config"; chmod +x "$OUT/sdk/bin/wx-config"
     rm -f "$OUT/sdk/lib/libwxamiga-shared-$R.a"
     m68k-amigaos-ar rcs "$OUT/sdk/lib/libwxamiga-shared-$R.a" "$L/wxamiga_crt.o" "$L/wxamiga_stubs.o"
 fi
@@ -143,7 +148,13 @@ if [ -x "$OUT/sdk/bin/wx-config" ]; then
         # shellcheck disable=SC2046
         WXTK_SHARED=1 m68k-amigaos-g++ $APPF $(WXTK_SHARED=1 "$W" --cxxflags) -I"$WORK/wxgui/samples" -c "$2" -o "$L/$1.o"
         # shellcheck disable=SC2046
-        WXTK_SHARED=1 m68k-amigaos-g++ -noixemul -m68040 -specs="$SPECS" -s -o "$S/$1" "$L/$1.o" $(WXTK_SHARED=1 "$W" --libs std)
+        WXTK_SHARED=1 m68k-amigaos-g++ -noixemul -m68040 -specs="$SPECS" -s -o "$S/$1" "$L/$1.o" $(WXTK_SHARED=1 "$W" --libs std) > "$L/$1.link" 2>&1 \
+            || { cat "$L/$1.link" >&2; exit 1; }
+        # ld only warns of A4-relative code in a program that has no A4 of
+        # its own, and the program then runs with it reaching the module's data
+        if grep -q 'base relative reloc' "$L/$1.link"; then
+            grep 'base relative reloc' "$L/$1.link" | head -5 >&2; echo "build-library: $1 has A4-relative code" >&2; exit 1
+        fi
     }
     build minimal "$WORK/wxgui/samples/minimal/minimal.cpp"
     for t in basetest wctest sockettest; do build "$t" "$HERE/tests/base/$t.cpp"; done
