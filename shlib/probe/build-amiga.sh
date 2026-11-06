@@ -14,8 +14,21 @@ L="$W/library"
   echo "== constructors"; m68k-amigaos-nm -n "$L/wx.module.debug" > "$W/nm.txt"
   c=$(grep " ___CTOR_LIST__$" "$W/nm.txt" | cut -d' ' -f1); d=$(grep " ___DTOR_LIST__$" "$W/nm.txt" | cut -d' ' -f1)
   m68k-amigaos-objdump -s -j .text --start-address=0x$c --stop-address=0x$d "$L/wx.module.debug" | grep '^ ' > "$W/ctor.txt"
-  python3 - "$W/nm.txt" "$W/ctor.txt" <<'P'
-import sys
+  python3 - "$W/nm.txt" "$W/ctor.txt" "$L/wx.module.map" <<'P'
+import sys, re
+ranges=[]
+cur=None
+for l in open(sys.argv[3], errors="replace"):
+    m=re.match(r"^ (\.text\S*)\s*$", l)
+    if m: cur=m.group(1); continue
+    m=re.match(r"^ (\.text\S*)?\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+(\S+)", l)
+    if m:
+        ranges.append((int(m.group(2),16), int(m.group(3),16), (m.group(1) or cur or "")+" "+m.group(4)))
+    cur=None if not l.startswith(" ") else cur
+def owner(a):
+    for b,n,f in ranges:
+        if b<=a<b+n: return "%s+%x" % (f.split("/")[-1], a-b)
+    return "?"
 syms=[]
 for l in open(sys.argv[1]):
     t=l.split()
@@ -26,7 +39,7 @@ for l in open(sys.argv[2]):
     words+= [int(w,16) for w in t[1:5] if len(w)==8]
 for w in words:
     best=max((s for s in syms if s[0]<=w), default=(0,"?"))
-    print("%08x %s+%x" % (w,best[1],w-best[0]))
+    print("%08x %s+%x %s" % (w,best[1],w-best[0],owner(w)))
 P
 } > "$OUTD/probe.log" 2>&1
 tail -n 30 "$OUTD/build.log"
