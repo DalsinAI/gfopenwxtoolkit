@@ -127,6 +127,8 @@ und=$(m68k-amigaos-nm -u "$L/wx.module.debug" || true)
 # (strip can't write a -resident32 file's data back: the linker strips it)
 modlink "$OUT/Libs/openwxtoolkit/wx.module" "$L/mod_tables.o" -s > "$L/mod3.log" 2>&1 || {
     tail -n 20 "$L/mod3.log" >&2; exit 1; }
+# the data its code reaches at its loaded address: one for every program
+python3 "$HERE/scripts/wxtk-absown.py" "$OUT/Libs/openwxtoolkit/wx.module" "$L/state.json"
 
 # the library
 m68k-amigaos-gcc -m68040 $OPT -fno-delete-null-pointer-checks -fomit-frame-pointer -fno-toplevel-reorder -fno-builtin \
