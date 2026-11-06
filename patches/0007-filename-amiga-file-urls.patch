@@ -1,0 +1,49 @@
+--- a/src/common/filename.cpp
++++ b/src/common/filename.cpp
+@@ -2702,6 +2702,19 @@
+     }
+ #endif
+ 
++#if defined(__AMIGA__)
++    // AmigaOS: FileNameToURL() writes "file:///Volume:dir/file"; the slash
++    // before a volume or assign name is not part of the path
++    if ( path.length() > 1 && path[0u] == wxT('/') && path[1u] != wxT('/') )
++    {
++        const int colon = path.Find(wxT(':'));
++        const int slash = path.find(wxT('/'), 1);
++        if ( colon != wxNOT_FOUND &&
++             (slash == (int)wxString::npos || colon < slash) )
++            path = path.Mid(1);
++    }
++#endif // __AMIGA__
++
+     path.Replace(wxS('/'), wxFILE_SEP_PATH);
+ 
+     return wxFileName(path, wxPATH_NATIVE);
+@@ -2720,7 +2733,13 @@
+         if ( (c >= '0' && c <= '9') ||
+              (c >= 'a' && c <= 'z') ||
+              (c >= 'A' && c <= 'Z') ||
++#if defined(__AMIGA__)
++             // AmigaOS: a volume's ':' is escaped, so that wxFileSystem
++             // does not take "file://Volume:" for a protocol
++             strchr("/$-_.+!*'(),", c) ) // Plus '/'
++#else
+              strchr("/:$-_.+!*'(),", c) ) // Plus '/' and ':'
++#endif
+         {
+             s << c;
+         }
+@@ -2752,6 +2771,12 @@
+ 
+     url.Replace(wxFILE_SEP_PATH, wxS('/'));
+ 
++#if defined(__AMIGA__)
++    // AmigaOS: "Volume:dir/file" becomes "file:///Volume%3adir/file"
++    if ( !url.StartsWith(wxS("/")) )
++        url = wxS("/") + url;
++#endif // __AMIGA__
++
+     // Do wxURI- and common practice-compatible escaping: encode the string
+     // into UTF-8, then escape anything non-ASCII:
+     return wxT("file://") + EscapeFileNameCharsInURL(url.utf8_str());
