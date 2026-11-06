@@ -34,7 +34,8 @@ figures() {   # variant work
     } > "$d/sizes.txt" 2>&1
 }
 
-for v in o2 os baserel; do
+# the library build first: it is the longest
+for v in baserel os o2; do
     [ "$(cat "$F/$v/.done" 2>/dev/null)" = "$SHA" ] && { echo "$v: done already"; continue; }
     left=$((830 - ($(date +%s) - START)))
     [ "$left" -gt 60 ] || { echo "out of time before $v"; break; }
