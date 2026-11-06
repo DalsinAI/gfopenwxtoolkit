@@ -11,36 +11,18 @@ WORK="$W" OUT="$OUTD" timeout 800 sh "$HERE/scripts/test-library.sh" > "$OUTD/bu
 rc=$?
 L="$W/library"
 { echo "== exit $rc"; grep -v -e warning -e "^ *|" -e "^ *[0-9]* |" "$OUTD/build.log" | tail -n 20
-  echo "== constructors"; m68k-amigaos-nm -n "$L/wx.module.debug" > "$W/nm.txt"
-  c=$(grep " ___CTOR_LIST__$" "$W/nm.txt" | cut -d' ' -f1); d=$(grep " ___DTOR_LIST__$" "$W/nm.txt" | cut -d' ' -f1)
-  m68k-amigaos-objdump -s -j .text --start-address=0x$c --stop-address=0x$d "$L/wx.module.debug" | grep '^ ' > "$W/ctor.txt"
-  python3 - "$W/nm.txt" "$W/ctor.txt" "$L/wx.module.map" <<'P'
-import sys, re
-ranges=[]
-cur=None
-for l in open(sys.argv[3], errors="replace"):
-    m=re.match(r"^ (\.text\S*)\s*$", l)
-    if m: cur=m.group(1); continue
-    m=re.match(r"^ (\.text\S*)?\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+(\S+)", l)
-    if m:
-        ranges.append((int(m.group(2),16), int(m.group(3),16), (m.group(1) or cur or "")+" "+m.group(4)))
-    cur=None if not l.startswith(" ") else cur
-def owner(a):
-    for b,n,f in ranges:
-        if b<=a<b+n: return "%s+%x" % (f.split("/")[-1], a-b)
-    return "?"
-syms=[]
-for l in open(sys.argv[1]):
-    t=l.split()
-    if len(t)==3 and t[1] in "tTdDbB": syms.append((int(t[0],16),t[2]))
-words=[]
-for l in open(sys.argv[2]):
-    t=l.split()
-    words+= [int(w,16) for w in t[1:5] if len(w)==8]
-for w in words:
-    best=max((s for s in syms if s[0]<=w), default=(0,"?"))
-    print("%08x %s+%x %s" % (w,best[1],w-best[0],owner(w)))
-P
+  echo "== init list entries in the program's libraries"
+  d=$(mktemp -d); cd "$d"
+  for l in libpthread.a libnix.a libstubs.a libnix20.a libamiga.a libsocket.a libatomic.a; do
+    a=$(m68k-amigaos-gcc -noixemul -m68040 -print-file-name=$l); [ -f "$a" ] || continue
+    rm -f ./*; m68k-amigaos-ar x "$a" 2>/dev/null
+    for o in *.o; do
+      m68k-amigaos-objdump -h "$o" 2>/dev/null | grep -q "list___INIT_LIST__" || continue
+      r=$(m68k-amigaos-objdump -r -j .list___INIT_LIST__ "$o" | awk '/RELOC32/{print $3}' | tr '\n' ' ')
+      v=$(m68k-amigaos-objdump -s -j .list___INIT_LIST__ "$o" | grep '^ 0000' | awk '{print $3}')
+      echo "$l $o: $r pri $v"
+    done
+  done; cd - >/dev/null
 } > "$OUTD/probe.log" 2>&1
 tail -n 30 "$OUTD/build.log"
 : > "$OUTD/exit-$rc"
