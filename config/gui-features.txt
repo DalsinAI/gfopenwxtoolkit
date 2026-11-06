@@ -43,7 +43,7 @@ LISTBOOK CHOICEBOOK TOOLBOOK
 PRINTING_ARCHITECTURE POSTSCRIPT
 # HTML help (4Pane's manual)
 HELP WXHTML_HELP
-STC
+STC BITMAPCOMBOBOX
 # off: wx's own TIFF reader isn't needed (PNG and JPEG are built in, from wx's src/png and src/jpeg)
 !LIBTIFF
 # off: wx's debug report needs its qa library and a network to send to
