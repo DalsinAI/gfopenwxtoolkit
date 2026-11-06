@@ -32,7 +32,9 @@ typedef void (*wxtk_fn)(void);
  * so they are reached directly, not through A4 */
 extern const wxtk_fn __CTOR_LIST__[], __DTOR_LIST__[];
 extern const long __INIT_LIST__[], __EXIT_LIST__[];
-extern const long _EH_FRAME_BEGINS__[], _EH_FRAME_OBJECTS__[];
+extern const long _EH_FRAME_BEGINS__[];
+/* in the data (each program's copy has its own objects): not const, so reached through A4 */
+extern long _EH_FRAME_OBJECTS__[];
 extern void __register_frame_info(const void *begin, void *object);
 extern void *__deregister_frame_info(const void *begin);
 
@@ -122,12 +124,13 @@ static void trace(const char *what, unsigned long n)
     *d++ = ' ';
     for (s = 28; s >= 0; s -= 4) *d++ = "0123456789abcdef"[(n >> s) & 15];
     *d++ = '\n';
-    write(2, t, (unsigned long)(d - t));
+    write(1, t, (unsigned long)(d - t));
 }
 
 long wxtk_module_entry(void)
 {
-    const long *b = _EH_FRAME_BEGINS__ + 1, *o = _EH_FRAME_OBJECTS__ + 1;
+    const long *b = _EH_FRAME_BEGINS__ + 1;
+    long *o = _EH_FRAME_OBJECTS__ + 1;
     const wxtk_fn *p0 = __CTOR_LIST__ + 1, *p;
     tracing = getenv("WXTK_DEBUG") != NULL;
     trace("start, A4", (unsigned long)my_a4());
