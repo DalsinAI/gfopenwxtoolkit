@@ -48,3 +48,6 @@ STC BITMAPCOMBOBOX TIMEPICKCTRL NANOSVG TREELISTCTRL
 !LIBTIFF
 # off: wx's debug report needs its qa library and a network to send to
 !DEBUGREPORT
+# for wxMaxima: the log window, notifications (wx's generic ones), splines
+# (its brackets) and the SVG file DC
+LOGWINDOW NOTIFICATION_MESSAGE SPLINES SVG
