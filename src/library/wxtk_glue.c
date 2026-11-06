@@ -67,11 +67,15 @@ static void wxtk_fail(const char *msg)
     exit(20);
 }
 
+static int wxtk_debug;
+
 void __wxtk_exit(void)
 {
     struct WXTKApp *app = &__wxtk_app;
     if (wxtk_base) {
+        if (wxtk_debug && Output()) Write(Output(), (APTR)"openwxtoolkit: unbinding\n", 25);
         wxtk_unbind(app);
+        if (wxtk_debug && Output()) Write(Output(), (APTR)"openwxtoolkit: unbound\n", 23);
         CloseLibrary(wxtk_base);
         wxtk_base = NULL;
     }
@@ -97,7 +101,8 @@ void __wxtk_init(void)
     if (!wxtk_base) wxtk_fail("This program needs " WXTK_LIBNAME " (GFOpenWX Toolkit) in LIBS:");
     if (wxtk_bind(app)) wxtk_fail(app->error);
     __wxtk_a4 = app->a4;
-    if (GetVar((CONST_STRPTR)"WXTK_DEBUG", (STRPTR)wxtk_progname, 4, 0) >= 0 && Output())
+    wxtk_debug = GetVar((CONST_STRPTR)"WXTK_DEBUG", (STRPTR)wxtk_progname, 4, 0) >= 0;
+    if (wxtk_debug && Output())
         Write(Output(), (APTR)"openwxtoolkit: bound\n", 21);
 }
 ADD2INIT(__wxtk_init, -5);

@@ -254,7 +254,7 @@ def link(outdir, mod_t, mod_log, names_txt):
         if n in exports:
             sys.exit("wxtk-gen: %s is both given and taken" % n)
     with open(os.path.join(outdir, "state.json"), "w") as f:
-        json.dump({"exports": exports, "imports": imports, "absent": []}, f)
+        json.dump({"exports": exports, "imports": imports, "taken": imports, "absent": []}, f)
     write_probe(outdir, imports)
     ncode = sum(1 for d in exports.values() if d["kind"] == "code")
     nown = sum(1 for d in exports.values() if d["own"])
@@ -272,8 +272,11 @@ def write_probe(outdir, imports):
 def absent(outdir, probe_log):
     st = json.load(open(os.path.join(outdir, "state.json")))
     missing = undefined_in(probe_log)
-    gone = [n for n in st["imports"] if n in missing or n[1:] in missing]
-    st["imports"] = [n for n in st["imports"] if n not in gone]
+    # (from all the module takes: a run that goes on after this step was
+    # done once finds its imports already cut down)
+    taken = st.get("taken", st["imports"])
+    gone = [n for n in taken if n in missing or n[1:] in missing]
+    st["imports"] = [n for n in taken if n not in gone]
     st["absent"] = gone
     with open(os.path.join(outdir, "state.json"), "w") as f:
         json.dump(st, f)
