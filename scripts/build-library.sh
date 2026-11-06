@@ -86,7 +86,9 @@ modlink "$L/wx.module.debug" "$L/mod_tables.o" -Wl,-Map,"$L/wx.module.map" > "$L
     grep -v 'duplicate section' "$L/mod2.log" | tail -n 60 >&2; echo "build-library: the module didn't link" >&2; exit 1; }
 und=$(m68k-amigaos-nm -u "$L/wx.module.debug" || true)
 [ -z "$und" ] || { echo "build-library: undefined in wx.module: $und" >&2; exit 1; }
-m68k-amigaos-strip -o "$OUT/Libs/openwxtoolkit/wx.module" "$L/wx.module.debug"
+# (strip can't write a -resident32 file's data back: the linker strips it)
+modlink "$OUT/Libs/openwxtoolkit/wx.module" "$L/mod_tables.o" -s > "$L/mod3.log" 2>&1 || {
+    tail -n 20 "$L/mod3.log" >&2; exit 1; }
 
 # the library
 m68k-amigaos-gcc -m68040 -O2 -fno-delete-null-pointer-checks -fomit-frame-pointer -fno-toplevel-reorder -fno-builtin \
