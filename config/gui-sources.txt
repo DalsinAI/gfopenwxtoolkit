@@ -28,3 +28,6 @@ src/unix/sound.cpp
 # Cairo's renderer: without Cairo it defines a GetDefaultRenderer() that
 # returns NULL, beside our own in src/openlayout/graphics.cpp
 -src/generic/graphicc.cpp
+# PNG and JPEG through datatypes: our handlers in src/openlayout/dtimage.cpp
+-src/common/imagpng.cpp
+-src/common/imagjpeg.cpp

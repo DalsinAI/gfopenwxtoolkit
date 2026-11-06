@@ -25,6 +25,7 @@ Dale chose this route on 4 Nov 2026, over writing all of wx ourselves. It is mea
 - **Menu bars** are Intuition menus (GadTools), the Amiga way: right button, screen title bar, Amiga-key shortcuts from wx's accelerators.
 - **Timers and idle**: the event loop `Wait()`s on the windows' ports, a timer.device request for the next wx timer, and the wake signal threads use (`wxWakeUpIdle`). wx idle events run when the queue is empty.
 - **Sockets**: wx's sockets are libnix's (`-lsocket`, bsdsocket.library opened for the main task). When wx watches any, the loop waits with `WaitSelect` on their stack descriptors and the same signal mask, and calls their handlers after (`src/openlayout/sockets.cpp`). Sockets are used from the main task only: bsdsocket.library is opened per task.
+- **The system's own libraries, not compiled-in copies.** zlib is z.library (GFOpenZlib): `libwxzlib` holds only `src/amiga/wxzlib_zlibrary.c`, which calls the library through its LVOs (opened on first use). wxImage reads PNG and JPEG through datatypes.library (`src/openlayout/dtimage.cpp`: the picture datatypes give ARGB pixels through `PDTM_READPIXELARRAY`), and writes PNG through gfopenpng.datatype's `OIM_ENCODEPNG`; JPEG can't be written, as no datatype writes it. No libpng or libjpeg is built. Expat, regex, NanoSVG and Scintilla stay compiled in, since there's no system library for them.
 
 ## The DC
 

@@ -58,14 +58,22 @@ if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
 fi
 (cd "$B" && nice -n 19 make -j"$JOBS" > make.log 2>&1) || { grep -E 'error' "$B/make.log" | head -40; exit 1; }
 
+# zlib is z.library's (GFOpenZlib), not wx's built-in copy: libwxzlib holds
+# only the glue that calls the library, built against wx's zlib.h (whose
+# names wx's code was compiled with)
+# shellcheck disable=SC2086
+m68k-amigaos-gcc $FLAGS -Wall -I"$SRC/src/zlib" $INC -c "$HERE/src/amiga/wxzlib_zlibrary.c" -o "$B/wxzlib_zlibrary.o"
+ZLIB=$(ls "$B"/lib/libwxzlib-*.a)
+rm -f "$ZLIB"; m68k-amigaos-ar rcs "$ZLIB" "$B/wxzlib_zlibrary.o"
+
 CXXF="$FLAGS -std=gnu++17 $INC $("$B/wx-config" --cxxflags | sed 's/ -fPIC -DPIC//')"
 # shellcheck disable=SC2086
 m68k-amigaos-g++ $FLAGS -std=gnu++17 $INC -Wall -c "$HERE/src/amiga/wxamiga_crt.cpp" -o "$B/wxamiga_crt.o"
 # shellcheck disable=SC2086
 m68k-amigaos-gcc $FLAGS -Wall -c "$HERE/src/amiga/wxamiga_stubs.c" -o "$B/wxamiga_stubs.o"
-for t in basetest wctest sockettest; do
+for t in basetest wctest sockettest ztest; do
     # shellcheck disable=SC2086
-    m68k-amigaos-g++ $CXXF "$HERE/tests/base/$t.cpp" "$B/wxamiga_crt.o" "$B/wxamiga_stubs.o" -o "$OUT/$t" \
+    m68k-amigaos-g++ $CXXF -I"$SRC/src/zlib" "$HERE/tests/base/$t.cpp" "$B/wxamiga_crt.o" "$B/wxamiga_stubs.o" -o "$OUT/$t" \
         -specs="$SPECS" $("$B/wx-config" --libs base,xml,net) -lsocket -lpthread -latomic
     m68k-amigaos-strip "$OUT/$t"
 done
