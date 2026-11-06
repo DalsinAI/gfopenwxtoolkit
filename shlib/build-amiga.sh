@@ -27,4 +27,6 @@ count
 grep -v -e 'warning' -e '^ *|' -e '^ *[0-9]* |' -e 'In file included' -e '^ *from ' "$OUTD/build.log" | cut -c1-400 | tail -n 120
 grep 'wxtk-gen' "$OUTD/build.log" | cut -c1-3000
 echo "build-amiga.sh exit $rc"
-exit $rc
+# a failed job hands nothing over: the code goes in a file name and the job ends well, so build.log can be fetched
+: > "$OUTD/exit-$rc"
+exit 0
