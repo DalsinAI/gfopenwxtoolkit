@@ -108,18 +108,38 @@ static void run_atexits(void)
 
 /* ---- start and end ----------------------------------------------------------------- */
 
-static int started;
+static int started, tracing;
+
+extern long write(int fd, const void *buf, unsigned long n);
+/* with WXTK_DEBUG set, the module's start says how far it got */
+static void trace(const char *what, unsigned long n)
+{
+    char t[64], *d = t;
+    int s;
+    if (!tracing) return;
+    for (const char *a = "wx.module: "; *a; ) *d++ = *a++;
+    while (*what && d < t + 48) *d++ = *what++;
+    *d++ = ' ';
+    for (s = 28; s >= 0; s -= 4) *d++ = "0123456789abcdef"[(n >> s) & 15];
+    *d++ = '\n';
+    write(2, t, (unsigned long)(d - t));
+}
 
 long wxtk_module_entry(void)
 {
     const long *b = _EH_FRAME_BEGINS__ + 1, *o = _EH_FRAME_OBJECTS__ + 1;
     const wxtk_fn *p0 = __CTOR_LIST__ + 1, *p;
+    tracing = getenv("WXTK_DEBUG") != NULL;
+    trace("start, A4", (unsigned long)my_a4());
     while (*b) __register_frame_info((const void *)*b++, (void *)*o++);
+    trace("EH frames", (unsigned long)(b - _EH_FRAME_BEGINS__ - 1));
     level = 0;
     callfuncs(__INIT_LIST__, ~0UL);
+    trace("init list run", 0);
     for (p = p0; *p; p++) {
     }
-    while (p > p0) (*--p)();
+    while (p > p0) { --p; trace("constructor", (unsigned long)*p); (*p)(); }
+    trace("started", 0);
     started = 1;
     return 0;
 }
