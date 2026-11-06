@@ -213,8 +213,16 @@ void wxWindowOpenLayout::OLPlace()
             struct TextFont *tf = m_font.GetTextFont();
             if ( tf )
                 decls += wxString::Format(";font-size:%dpx", (int)tf->tf_YSize);
+            // a named face first (olui opens it through diskfont), then the
+            // theme's fixed face for a fixed one
             const wxFontFamily fam = m_font.GetFamily();
-            if ( m_font.IsFixedWidth() || fam == wxFONTFAMILY_MODERN || fam == wxFONTFAMILY_TELETYPE )
+            const bool fixed = m_font.IsFixedWidth() || fam == wxFONTFAMILY_MODERN || fam == wxFONTFAMILY_TELETYPE;
+            wxString face = m_font.GetFaceName();
+            face.Replace("\\", "");
+            face.Replace("\"", "");
+            if ( !face.empty() )
+                decls += ";font-family:\"" + face + "\"" + (fixed ? ",monospace" : "");
+            else if ( fixed )
                 decls += ";font-family:monospace";
             if ( m_font.GetWeight() >= wxFONTWEIGHT_BOLD )
                 decls += ";font-weight:bold";
