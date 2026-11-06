@@ -18,7 +18,8 @@ WORK=${WORK:-"$HERE/build"}; OUT=${OUT:-"$WORK/out"}
 SPECS="$HERE/scripts/m68k-soft-m68040.specs"
 LATE=""
 if m68k-amigaos-gcc -fno-late-combine-instructions -S -o /dev/null -x c /dev/null 2>/dev/null; then LATE="-fno-late-combine-instructions"; fi
-CF="-noixemul -m68040 -O2 $LATE -fno-delete-null-pointer-checks"
+case "${WXTK_OPT:-Os}" in O2) OPT="-O2" ;; *) OPT="-Os" ;; esac
+CF="-noixemul -m68040 $OPT $LATE -fno-delete-null-pointer-checks"
 G="$WORK/gui"; BL="$WORK/base/lib"; L="$WORK/library"; R=3.2
 rm -rf "$L"; mkdir -p "$L" "$OUT/Libs/openwxtoolkit"
 
@@ -91,7 +92,7 @@ modlink "$OUT/Libs/openwxtoolkit/wx.module" "$L/mod_tables.o" -s > "$L/mod3.log"
     tail -n 20 "$L/mod3.log" >&2; exit 1; }
 
 # the library
-m68k-amigaos-gcc -m68040 -O2 -fno-delete-null-pointer-checks -fomit-frame-pointer -fno-toplevel-reorder -fno-builtin \
+m68k-amigaos-gcc -m68040 $OPT -fno-delete-null-pointer-checks -fomit-frame-pointer -fno-toplevel-reorder -fno-builtin \
     -Wall -Wno-unused-parameter -nostartfiles -nostdlib -specs="$SPECS" -I"$HERE/src/library" \
     -o "$L/openwxtoolkit.library" "$HERE/src/library/openwxtoolkit_lib.c" -lgcc
 und=$(m68k-amigaos-nm -u "$L/openwxtoolkit.library" || true)

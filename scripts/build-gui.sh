@@ -17,6 +17,14 @@ mkdir -p "$G/wx" "$G/obj" "$OUT"
 # setup.h, and wx's tree with the toolkit wired in, made again when what
 # goes into them changes (and the objects with them)
 python3 "$HERE/scripts/make-setup.py" "$BASESETUP" "$HERE/config/gui-features.txt" "$G/wx/setup.h.new"
+case "${WXTK_OPT:-Os}" in
+    O2) OPT="-O2" ;;
+    *) OPT="-Os"
+       # wx built without its debug checks: a program built against it has
+       # to be too (setup.h says so, before wx/debug.h's default of 1)
+       printf '\n#ifndef wxDEBUG_LEVEL\n#define wxDEBUG_LEVEL 0\n#endif\n' >> "$G/wx/setup.h.new" ;;
+esac
+BASEREL=""; [ "${WXTK_BASEREL:-0}" = 1 ] && BASEREL="-fbaserel32 -fdata-sections"
 cmp -s "$G/wx/setup.h.new" "$G/wx/setup.h" || mv "$G/wx/setup.h.new" "$G/wx/setup.h"
 rm -f "$G/wx/setup.h.new"
 SUM=$( (cat "$HERE/scripts/add-toolkit.py" "$HERE/config/toolkit-edits.txt" "$SRC/.patched"; ls "$HERE/include/wx/openlayout") | sha256sum | cut -c1-16)
@@ -65,7 +73,7 @@ PY
 
 LATE=""
 if m68k-amigaos-gcc -fno-late-combine-instructions -S -o /dev/null -x c /dev/null 2>/dev/null; then LATE="-fno-late-combine-instructions"; fi
-CF="-noixemul -m68040 -O2 $LATE"
+CF="-noixemul -m68040 $OPT $BASEREL $LATE"
 INC="-I$G -I$HERE/include -I$T/include -I$OLUI ${NDK:+-I$NDK}"
 CXXF="$CF -std=gnu++17 -include $HERE/include/wx/openlayout/amigacompat.h -D__WXOPENLAYOUT__ -DWXBUILDING -DwxUSE_GUI=1 $INC -Wno-deprecated-declarations"
 
@@ -76,11 +84,15 @@ M="$G/Makefile"
     SCI="-I$T/src/stc/scintilla/include -I$T/src/stc/scintilla/lexlib -I$T/src/stc/scintilla/src -D__WX__ -DSCI_LEXER -DNO_CXX11_REGEX -DLINK_LEXERS"
     echo "STCF = \$(CXXF) $SCI"
     echo "SCIF = \$(CXXF) -DNDEBUG $SCI"
+    # drawing and image conversion stay -O2 (config/hot-sources.txt)
+    echo "HOTF = \$(CXXF) -O2"
+    HOT=$(sed 's/#.*//' "$HERE/config/hot-sources.txt" | tr -s ' \n' ' ')
     OBJS=""
     while read -r s; do
         o="obj/$(echo "$s" | sed 's|^src/||; s|/|_|g; s|\.cpp$|.o|')"
         OBJS="$OBJS $o"
         case "$s" in src/stc/*|*/xh_styledtextctrl.cpp) f=STCF ;; *) f=CXXF ;; esac
+        case " $HOT " in *" $s "*) f=HOTF ;; esac
         printf '%s: %s\n\tm68k-amigaos-g++ $(%s) -MMD -c %s -o $@\n' "$o" "$T/$s" "$f" "$T/$s"
     done < "$G/sources.txt"
     SOBJS=""
@@ -93,7 +105,8 @@ M="$G/Makefile"
         [ -f "$s" ] || continue
         o="obj/ol_$(basename "$s" .cpp).o"
         OBJS="$OBJS $o"
-        printf '%s: %s\n\tm68k-amigaos-g++ $(CXXF) -MMD -c %s -o $@\n' "$o" "$s" "$s"
+        f=CXXF; case " $HOT " in *" src/openlayout/$(basename "$s") "*) f=HOTF ;; esac
+        printf '%s: %s\n\tm68k-amigaos-g++ $(%s) -MMD -c %s -o $@\n' "$o" "$s" "$f" "$s"
     done
     # the Makefile is a prerequisite, so a file taken out of the lists
     # leaves the archive too

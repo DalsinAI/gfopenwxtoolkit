@@ -5,3 +5,9 @@ OLUI_COMMIT=ee07d42b568a1a36026a7dbf5ef8cbbb82ff017d
 # GFOpenGadTools' theme reader (libraries/opengadtools/lib/ogt_theme.c)
 OGT_REPO=https://github.com/DalsinAI/amicradle-guest
 OGT_COMMIT=6b96130682286b0d91707bdc61bbfb60c43113c4
+# regex.library (GFOpenRegex): wxRegEx's engine, through its <regex.h> and link stub
+REGEX_REPO=https://github.com/DalsinAI/gfopenregex
+REGEX_COMMIT=5541226f6edf0ccd7c1df02129ac25efa884fa2f
+# OXP, the Team's XML parser (gfopenxml oxp/): wxXmlDocument's, behind an Expat-API shim
+OXP_REPO=https://github.com/DalsinAI/gfopenxml
+OXP_COMMIT=a18c2707b3624274f7a338b0502eb0ed794e52d5

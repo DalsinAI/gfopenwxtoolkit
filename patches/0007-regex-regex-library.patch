@@ -1,0 +1,68 @@
+--- a/src/common/regex.cpp	2026-11-06 12:03:47.358223955 +0000
++++ b/src/common/regex.cpp	2026-11-06 12:03:47.381127559 +0000
+@@ -41,7 +41,11 @@
+ // PCRE and the old regex library implementation at makefile level, so we just
+ // always use PCRE and the old code is only kept temporarily in case we decide
+ // to revert these changes.
++// The Amiga port builds with -DwxUSE_PCRE=0 and regex.library's <regex.h>
++// (GFOpenRegex), in place of the built-in PCRE.
++#ifndef wxUSE_PCRE
+ #define wxUSE_PCRE 1
++#endif
+ 
+ // WXREGEX_USING_BUILTIN    defined when using the built-in regex lib
+ // WXREGEX_USING_RE_SEARCH  defined when using re_search in the GNU regex lib
+@@ -269,7 +273,15 @@
+ #else
+     typedef char wxRegChar;
+ 
+-#   ifdef HAVE_RE_SEARCH
++#   if defined(REG_UTF8) && defined(REG_PERL)
++        // GFOpenRegex (regex.library): the subject is UTF-8 and has a length
++        inline int
++        wx_regexec(const regex_t* preg, const char* string, size_t len,
++                   size_t nmatch, regmatch_t* pmatch, int eflags)
++        {
++            return regnexec(preg, string, len, nmatch, pmatch, eflags);
++        }
++#   elif defined(HAVE_RE_SEARCH)
+ #       define WXREGEX_USING_RE_SEARCH
+ #   else
+         // We can't use length, so just drop it in this wrapper.
+@@ -283,7 +295,14 @@
+ #   if wxUSE_UNICODE
+ #       define WXREGEX_CONVERT_TO_MB
+ #   endif
+-#   define wx_regcomp regcomp
++#   if defined(REG_UTF8) && defined(REG_PERL)
++        inline int wx_regcomp(regex_t* preg, const char* pattern, int cflags)
++        {
++            return regcomp(preg, pattern, cflags | REG_UTF8);
++        }
++#   else
++#       define wx_regcomp regcomp
++#   endif
+ #   define wx_regfree regfree
+ #   define wx_regerror regerror
+ #endif
+@@ -1031,6 +1050,9 @@
+ 
+ #if wxUSE_PCRE
+ #   define FLAVORS (wxRE_ADVANCED | wxRE_BASIC)
++#elif defined(REG_PERL)
++    // regex.library: wxRE_ADVANCED is its Perl syntax
++#   define FLAVORS (wxRE_ADVANCED | wxRE_BASIC)
+ #elif !defined(WXREGEX_USING_BUILTIN)
+ #   define FLAVORS wxRE_BASIC
+ #else
+@@ -1066,6 +1088,10 @@
+         if (flags & wxRE_ADVANCED)
+             flagsRE |= REG_ADVANCED;
+         else
++#elif !wxUSE_PCRE && defined(REG_PERL)
++        if (flags & wxRE_ADVANCED)
++            flagsRE |= REG_PERL;
++        else
+ #endif
+             flagsRE |= REG_EXTENDED;
+     }
