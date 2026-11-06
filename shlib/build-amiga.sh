@@ -34,6 +34,7 @@ figures() {   # variant work
     } > "$d/sizes.txt" 2>&1
 }
 
+echo "== disk"; df -h /tmp "$HOME" 2>&1; quota -s 2>&1 | head; du -sh "$C"/* 2>/dev/null; du -sh /tmp 2>/dev/null
 # the library build first: it is the longest
 for v in baserel os o2; do
     # (a variant once built stays: remove its .done to build it again)
@@ -76,9 +77,8 @@ if [ -f "$BW/library/wctest.o" ]; then
             && echo "$t-tr linked"
     done
     m68k-amigaos-objdump -h "$OUTD/lab/wctest-tr" 2>&1 | head -20
-    echo "== libnix's cxxglue (init -5, after the glue)"
-    NIX=$(m68k-amigaos-gcc -noixemul -m68040 -print-file-name=libnix.a)
-    (cd "$BW/library" && rm -rf nixx && mkdir nixx && cd nixx && m68k-amigaos-ar x "$NIX" cxxglue.o && m68k-amigaos-objdump -d -r cxxglue.o | head -150; m68k-amigaos-nm cxxglue.o)
+    echo "== where wctest-tr's __register_frame_info comes from"
+    grep -n -B1 -A2 '_register_frame_info' "$OUTD/lab/wctest-tr.map" | cut -c1-200 | head -30
     echo "== wctest-tr's set lists"
     awk '/^ ?\.list___(CTOR|INIT|EXIT|DTOR)_LIST__/{p=1;print;next} p&&/^ ?\.[a-z]/{p=0} p' "$OUTD/lab/wctest-tr.map" | cut -c1-160 | head -150
 fi
