@@ -34,7 +34,11 @@ figures() {   # variant work
     } > "$d/sizes.txt" 2>&1
 }
 
-echo "== disk"; df -h /tmp "$HOME" 2>&1; quota -s 2>&1 | head; du -sh "$C"/* 2>/dev/null; du -sh /tmp 2>/dev/null
+echo "== disk"; df -h /tmp "$HOME" 2>&1; du -sh "$C"/* 2>/dev/null
+echo "== /tmp's biggest (owner, size)"; du -s /tmp/* 2>/dev/null | sort -rn | head -15 | while read -r k p; do echo "$(stat -c %U "$p") $((k/1024))M $p"; done
+echo "== mine in /tmp: $(find /tmp -maxdepth 1 -user "$(id -un)" -name 'cc*' 2>/dev/null | wc -l) cc* files, $(find /tmp -maxdepth 1 -user "$(id -un)" -name 'cc*' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print int(s/1048576)}') MB"
+# (the compilers' temporary files go under the cache, not the shared /tmp)
+export TMPDIR="$C/tmp"; mkdir -p "$TMPDIR"
 # the library build first: it is the longest
 for v in baserel os o2; do
     # (a variant once built stays: remove its .done to build it again)
