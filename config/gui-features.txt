@@ -47,3 +47,6 @@ HELP WXHTML_HELP
 !LIBTIFF
 # off: wx's debug report needs its qa library and a network to send to
 !DEBUGREPORT
+# for wxMaxima: the log window, notifications (wx's generic ones), splines
+# (its brackets), the SVG file DC and SVG bitmaps (wx's bundled NanoSVG)
+LOGWINDOW NOTIFICATION_MESSAGE SPLINES SVG NANOSVG
