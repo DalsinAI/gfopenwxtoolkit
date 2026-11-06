@@ -3,7 +3,11 @@
 # wxBase and its tests, the GFOpenLayout UI library, the GUI library, wx's
 # minimal sample and the SDK (include/, lib/, bin/wx-config) apps build with.
 #   STOVE=.../stoves/os32-gcc16-open6 OUT=out ./build-amiga.sh
-#   (OLUI_SRC=... OGT=... to use trees already on disk)
+#   (OLUI_SRC=... OGT=... REGEX_SRC=... OXP_SRC=... to use trees already on disk)
+#   WXTK_OPT=O2      the whole build at -O2, with wx's debug checks (the
+#                    default: -Os, -O2 for the hot files, wxDEBUG_LEVEL=0)
+#   WXTK_BASEREL=1   wx built -fbaserel32 -fdata-sections, for the wx module
+#   (each has a build tree of its own)
 # wxWidgets and our own GFOpenLayout and GFOpenGadTools are fetched at the
 # versions wx.lock and deps.lock give; nothing third-party is kept here.
 # Copyright (c) 2026 AmiCradle Team
@@ -13,7 +17,11 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 STOVE=${STOVE:-"$HOME/AmiCradle/stoves/os32-gcc16-open6"}
 # the build tree lives outside the checkout: Cradle cleans the checkout
 # (git clean) before each job, so a tree inside it never carries over
-WORK="${WORK:-$HOME/.cache/gfopenwxtoolkit/build}"; OUT="${OUT:-$WORK/out}"; JOBS=${JOBS:-12}
+# (the -O2 tree keeps the name the earlier builds used)
+DEFWORK="$HOME/.cache/gfopenwxtoolkit/build"
+[ "${WXTK_OPT:-Os}" = O2 ] || DEFWORK="$DEFWORK-os"
+[ "${WXTK_BASEREL:-0}" = 1 ] && DEFWORK="$DEFWORK-baserel"
+WORK="${WORK:-$DEFWORK}"; OUT="${OUT:-$WORK/out}"; JOBS=${JOBS:-12}
 mkdir -p "$WORK/deps" "$OUT"
 
 # a repository at one commit, fetched once
@@ -35,19 +43,25 @@ if [ -z "${OGT:-}" ]; then
     fetch amicradle-guest "$OGT_REPO" "$OGT_COMMIT"; OGT="$WORK/deps/amicradle-guest/libraries/opengadtools"
 fi
 
+if [ -z "${REGEX_SRC:-}" ]; then
+    fetch gfopenregex "$REGEX_REPO" "$REGEX_COMMIT"; REGEX_SRC="$WORK/deps/gfopenregex"
+fi
+if [ -z "${OXP_SRC:-}" ]; then
+    fetch gfopenxml "$OXP_REPO" "$OXP_COMMIT"; OXP_SRC="$WORK/deps/gfopenxml/oxp"
+fi
+export REGEX_SRC OXP_SRC
+
 TOOLCHAIN="$STOVE/prefix" WORK="$WORK" OUT="$OUT" JOBS=$JOBS sh "$HERE/scripts/build-base.sh"
 
 # GFOpenLayout UI (libolui.a), as gfopenlayout's build-ui-amiga.sh builds it
-CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
-U="$WORK/olui"; mkdir -p "$U/obj"
-F="-m68040 -specs=$HERE/scripts/m68k-soft-m68040.specs -noixemul -O2 -fno-delete-null-pointer-checks -fno-late-combine-instructions -std=gnu99 -I$OLUI_SRC/include -I$OLUI_SRC/ui -I$OGT/lib"
-for f in src/openlayout.c src/gfcss_parse.c src/gfcss_values.c src/gfcss_select.c src/openlayout_css.c \
-         ui/olui.c ui/olui_css.c ui/olui_markup.c ui/olui_theme.c amiga/olui_amiga.c; do
-    "$CC" $F -c "$OLUI_SRC/$f" -o "$U/obj/$(basename "$f" .c).o"
-done
-"$CC" $F -Wno-sign-compare -c "$OGT/lib/ogt_theme.c" -o "$U/obj/ogt_theme.o"
-rm -f "$U/libolui.a"; "$STOVE/prefix/bin/m68k-amigaos-ar" rcs "$U/libolui.a" "$U"/obj/*.o
+STOVE="$STOVE" WORK="$WORK" OLUI_SRC="$OLUI_SRC" OGT="$OGT" sh "$HERE/scripts/build-olui.sh"
+U="$WORK/olui"
 
 TOOLCHAIN="$STOVE/prefix" WORK="$WORK" OUT="$OUT" JOBS=$JOBS OLUI="$OLUI_SRC/include" OLUI_LIB="$U/libolui.a" \
     sh "$HERE/scripts/build-gui.sh" 2>&1 | grep -v 'duplicate section' | tail -40
+# openwxtoolkit.library, its wx module and the glue programs link with it
+# (the module is made of wx built -fbaserel32)
+if [ "${WXTK_BASEREL:-0}" = 1 ]; then
+    TOOLCHAIN="$STOVE/prefix" WORK="$WORK" OUT="$OUT" sh "$HERE/scripts/build-library.sh"
+fi
 ls -l "$OUT"

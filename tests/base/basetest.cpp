@@ -16,6 +16,8 @@
 #include <wx/stdpaths.h>
 #include <wx/utils.h>
 #include <wx/log.h>
+#include <wx/xml/xml.h>
+#include <wx/sstream.h>
 #include <cstdio>
 
 static int pass, fail;
@@ -40,6 +42,9 @@ private:
 
 int main(int argc, char **argv)
 {
+    // each line as it is made, so a hang shows where it stopped
+    setvbuf(stdout, NULL, _IONBF, 0);
+    printf("     starting wx\n");
     wxInitializer init(argc, argv);
     check(init.IsOk(), "wxInitializer");
 
@@ -53,6 +58,48 @@ int main(int argc, char **argv)
 
     wxRegEx re("([a-z]+)-([0-9.]+)");
     check(re.IsValid() && re.Matches(s) && re.GetMatch(s, 2) == "3.25", "wxRegEx");
+    {
+        // regex.library: case, replace, wxRE_ADVANCED (its Perl syntax), UTF-8
+        wxRegEx ic("AMIGA", wxRE_ICASE);
+        check(ic.IsValid() && ic.Matches(s), "wxRegEx wxRE_ICASE");
+        wxString r = "a1b22c333";
+        wxRegEx digits("[0-9]+");
+        check(digits.Replace(&r, "#") == 3 && r == "a#b#c#", "wxRegEx::Replace");
+        wxRegEx adv("\\d+\\.(\\d+)", wxRE_ADVANCED);
+        check(adv.IsValid() && adv.Matches(s) && adv.GetMatch(s, 1) == "25", "wxRegEx wxRE_ADVANCED");
+        wxRegEx u("t(.)t");
+        wxString e = wxString::FromUTF8("\xc3\xa9t\xc3\xa9t\xc3\xa9");
+        check(u.IsValid() && u.Matches(e) && u.GetMatch(e, 1) == wxString::FromUTF8("\xc3\xa9"), "wxRegEx UTF-8");
+        wxLogNull quiet;
+        wxRegEx bad("(unclosed");
+        check(!bad.IsValid(), "wxRegEx bad pattern refused");
+    }
+    {
+        // OXP behind wxXmlDocument
+        wxStringInputStream in(wxString::FromUTF8(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<resource version=\"2.3.0.1\">\n"
+            "  <!-- a comment -->\n"
+            "  <object class=\"wxFrame\" name=\"main\"><title>Caf\xc3\xa9 &amp; co</title>"
+            "<![CDATA[<raw>]]></object>\n"
+            "</resource>\n"));
+        wxXmlDocument doc;
+        bool ok = doc.Load(in);
+        wxXmlNode *root = ok ? doc.GetRoot() : NULL;
+        wxXmlNode *obj = root ? root->GetChildren() : NULL;
+        while (obj && obj->GetType() != wxXML_ELEMENT_NODE) obj = obj->GetNext();
+        wxXmlNode *title = obj ? obj->GetChildren() : NULL;
+        check(ok && root && root->GetName() == "resource" && root->GetAttribute("version") == "2.3.0.1"
+              && doc.GetVersion() == "1.0" && doc.GetFileEncoding() == "UTF-8", "wxXmlDocument load");
+        check(obj && obj->GetAttribute("name") == "main" && title && title->GetName() == "title"
+              && title->GetNodeContent() == wxString::FromUTF8("Caf\xc3\xa9 & co")
+              && title->GetNext() && title->GetNext()->GetType() == wxXML_CDATA_SECTION_NODE
+              && title->GetNext()->GetContent() == "<raw>", "wxXmlDocument nodes");
+        wxLogNull quiet;
+        wxStringInputStream broken("<a><b></a>");
+        wxXmlDocument bad;
+        check(!bad.Load(broken), "wxXmlDocument refuses bad XML");
+    }
 
     wxFileName fn("RAM:T/wxtest/sub/file.txt");
     check(fn.GetName() == "file" && fn.GetExt() == "txt", "wxFileName name/ext");

@@ -24,6 +24,16 @@ m68k-amigaos-g++ -noixemul -m68040 -specs=scripts/m68k-soft-m68040.specs -o app 
 
 wx.lock pins wxWidgets; deps.lock pins GFOpenLayout UI and GFOpenGadTools' theme reader.
 
+## openwxtoolkit.library (shared)
+
+wx programs can share one wxWidgets: `openwxtoolkit.library` loads `LIBS:openwxtoolkit/wx.module` (wx built `-fbaserel32`) once, and each program gets its own copy of the module's data. A program links against it with `WXTK_SHARED=1 wx-config --libs` and is about 0.8 MB instead of 2 to 7 MB.
+
+```
+STOVE=~/AmiCradle/stoves/os32-gcc16-open6 OUT=out sh library/build-amiga.sh
+```
+
+builds wx `-fbaserel32`, the library, its module, the tests linked shared and the package `GFOpenWXToolkit-1.0-rc1.lha` (Amiga Installer script `package/Install-GFOpenWXToolkit`). It needs regex.library and z.library at run time. `src/library/` holds the library, the glue each program links and the module's runtime; `scripts/wxtk-gen.py`, `scripts/build-library.sh` and `scripts/wxtk-absown.py` make the module.
+
 ## Layout
 
 | Where | What |

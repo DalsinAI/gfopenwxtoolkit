@@ -1,0 +1,16 @@
+# The GUI files built at -O2 when the rest is -Os (WXTK_OPT, the default):
+# drawing and image conversion, where speed counts more than size.
+src/common/dcbase.cpp
+src/common/dcbufcmn.cpp
+src/common/dcgraph.cpp
+src/common/graphcmn.cpp
+src/common/image.cpp
+src/common/imagbmp.cpp
+src/common/rgncmn.cpp
+src/generic/regiong.cpp
+src/generic/mask.cpp
+src/generic/imaglist.cpp
+src/openlayout/dc.cpp
+src/openlayout/graphics.cpp
+src/openlayout/bitmap.cpp
+src/openlayout/dtimage.cpp

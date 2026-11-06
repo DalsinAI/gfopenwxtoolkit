@@ -7,6 +7,8 @@
 # them gives that one; base, xml and net are wx's own base libraries. The
 # prefix is where this
 # script is, one up.
+# With WXTK_SHARED=1 in the environment, --libs links a program to
+# openwxtoolkit.library instead of a copy of wx of its own.
 # Copyright (c) 2026 AmiCradle Team
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -16,6 +18,9 @@ release=3.2
 config=openlayout-unicode-static-$release
 
 cxxflags="-I$prefix/lib/wx/include/$config -I$prefix/include/wx-$release -include wx/openlayout/amigacompat.h -D__WXOPENLAYOUT__ -D_FILE_OFFSET_BITS=64"
+# a program on openwxtoolkit.library leaves A4 to the wx module's code
+# (src/library/wxtoolkit_library.h)
+[ "${WXTK_SHARED:-0}" = 1 ] && cxxflags="$cxxflags -ffixed-a4"
 want_libs=0
 gui=0
 base=0
@@ -71,6 +76,15 @@ if [ "$want_libs" = 1 ]; then
     # (CMake's FindwxWidgets looks up every -l in its sysroot) takes them
     # as they are.
     L="$prefix/lib"
+    if [ "${WXTK_SHARED:-0}" = 1 ]; then
+        # openwxtoolkit.library: wx itself comes from LIBS: when the program
+        # starts; the program links only the glue and the C library calls
+        # wx needs (src/library/wxtoolkit_library.h), built for a program
+        # (libwxamiga's own are -fbaserel32 in a library build)
+        out="$out $L/wxtoolkit-tables.o $L/wxtoolkit-glue.o $L/libwxamiga-shared-$release.a -Wl,-lsocket,-lpthread,-latomic,-lm,-lamiga"
+        echo $out
+        exit 0
+    fi
     libs="-L$L -Wl,--start-group"
     # (the GUI library holds xrc and richtext, which read XML)
     [ "$gui" = 1 ] && xml=1
