@@ -7,6 +7,8 @@
 # them gives that one; base, xml and net are wx's own base libraries. The
 # prefix is where this
 # script is, one up.
+# With WXTK_SHARED=1 in the environment, --libs links a program to
+# openwxtoolkit.library instead of a copy of wx of its own.
 # Copyright (c) 2026 AmiCradle Team
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -71,6 +73,14 @@ if [ "$want_libs" = 1 ]; then
     # (CMake's FindwxWidgets looks up every -l in its sysroot) takes them
     # as they are.
     L="$prefix/lib"
+    if [ "${WXTK_SHARED:-0}" = 1 ]; then
+        # openwxtoolkit.library: wx itself comes from LIBS: when the program
+        # starts; the program links only the glue and the C library calls
+        # wx needs (src/library/wxtoolkit_library.h)
+        out="$out $L/wxtoolkit-tables.o $L/wxtoolkit-glue.o $L/libwxamiga-$release.a -Wl,-lsocket,-lpthread,-latomic,-lm,-lamiga"
+        echo $out
+        exit 0
+    fi
     libs="-L$L -Wl,--start-group"
     # (the GUI library holds xrc and richtext, which read XML)
     [ "$gui" = 1 ] && xml=1
