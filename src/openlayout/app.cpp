@@ -35,6 +35,8 @@ void wxOLFreeMasterUI();
 void wxOLCloseKeymap();
 void wxOLCloseGadTools();
 size_t wxOLOpenWindowCount();
+ULONG wxOLWaitSignalsAndSockets(ULONG mask);
+bool wxOLDispatchSockets();
 wxNonOwnedWindow *wxOLOpenWindow(size_t i);
 
 // ---- the port, the wake signal, the timer -------------------------------------------
@@ -283,7 +285,8 @@ bool wxGUIEventLoop::DoDispatch(long timeout)
         gs_timerPending = true;
         mask |= 1UL << gs_timerPort->mp_SigBit;
     }
-    const ULONG got = Wait(mask);
+    // the windows' signals, and the sockets wx watches (sockets.cpp)
+    const ULONG got = wxOLWaitSignalsAndSockets(mask);
     if ( gs_timerOpen )
         StopTimer();
 
@@ -295,6 +298,8 @@ bool wxGUIEventLoop::DoDispatch(long timeout)
         return true;
     }
     bool handled = (got & wake) != 0;
+    if ( wxOLDispatchSockets() )
+        handled = true;
     if ( HandleOneMessage() )
         handled = true;
 #if wxUSE_TIMER

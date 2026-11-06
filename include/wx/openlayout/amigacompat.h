@@ -36,6 +36,11 @@ extern "C" {
 /* libnix has it (libpthread's time support) but time.h only declares it
  * under the POSIX timers switch. */
 __stdargs int nanosleep(const struct timespec *rqtp, struct timespec *rmtp);
+/* libnix's socket library (-lsocket) keeps the resolver's error here; its
+ * netdb.h doesn't declare it. */
+#ifndef h_errno
+extern int h_errno;
+#endif
 #ifdef __cplusplus
 }
 #endif
