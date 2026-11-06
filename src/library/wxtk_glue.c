@@ -81,6 +81,59 @@ void __wxtk_exit(void)
     }
 }
 
+/* ---- the module calls the program's C library makes ----------------------------------
+ * The program's own code is built -ffixed-a4 and never keeps anything in A4,
+ * but its C library is not: libnix's ___init_eh holds the address it calls
+ * in A4 across its calls to __register_frame_info. A module stub leaves A4
+ * on the module's data, so these calls go through one that gives the caller
+ * its A4 back. (They are strong: the tables' stubs of the same name are weak.) */
+
+static ULONG wxtk_fnv(const char *s)
+{
+    ULONG h = 0x811C9DC5;
+    while (*s) h = (h ^ (UBYTE)*s++) * 0x01000193;
+    return h;
+}
+
+static APTR wxtk_target(const char *name)
+{
+    const struct WXTKApp *app = &__wxtk_app;
+    ULONG h = wxtk_fnv(name), i;
+    for (i = 0; i < app->ncode; i++)
+        if (app->code_hash[i] == h) return *(APTR *)(app->code_stubs + 6 * i + 4);
+    return NULL;
+}
+
+static APTR wxtk_reg_fi, wxtk_dereg_fi;
+
+/* fn(a, b) with A4 on the module's data, and the caller's A4 kept */
+static APTR wxtk_call2(APTR fn, APTR a, APTR b)
+{
+    register APTR r0 __asm("d0");
+    register APTR r1 __asm("d1") = a;
+    register APTR ra0 __asm("a0") = fn;
+    register APTR ra1 __asm("a1") = b;
+    __asm volatile ("move.l %%a4,-(%%sp)\n\t"
+                    "move.l %3,-(%%sp)\n\t"
+                    "move.l %1,-(%%sp)\n\t"
+                    "movea.l ___wxtk_a4,%%a4\n\t"
+                    "jsr (%2)\n\t"
+                    "addq.l #8,%%sp\n\t"
+                    "movea.l (%%sp)+,%%a4"
+                    : "=r"(r0), "+r"(r1), "+r"(ra0), "+r"(ra1) : : "cc", "memory");
+    return r0;
+}
+
+void __register_frame_info(const void *begin, void *ob)
+{
+    if (wxtk_reg_fi) wxtk_call2(wxtk_reg_fi, (APTR)begin, ob);
+}
+
+void *__deregister_frame_info(const void *begin)
+{
+    return wxtk_dereg_fi ? wxtk_call2(wxtk_dereg_fi, (APTR)begin, NULL) : NULL;
+}
+
 void __wxtk_init(void)
 {
     struct WXTKApp *app = &__wxtk_app;
@@ -101,6 +154,8 @@ void __wxtk_init(void)
     if (!wxtk_base) wxtk_fail("This program needs " WXTK_LIBNAME " (GFOpenWX Toolkit) in LIBS:");
     if (wxtk_bind(app)) wxtk_fail(app->error);
     __wxtk_a4 = app->a4;
+    wxtk_reg_fi = wxtk_target("___register_frame_info");
+    wxtk_dereg_fi = wxtk_target("___deregister_frame_info");
     wxtk_debug = GetVar((CONST_STRPTR)"WXTK_DEBUG", (STRPTR)wxtk_progname, 4, 0) >= 0;
     if (wxtk_debug && Output())
         Write(Output(), (APTR)"openwxtoolkit: bound\n", 21);
