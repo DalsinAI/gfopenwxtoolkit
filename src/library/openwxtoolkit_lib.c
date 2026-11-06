@@ -365,6 +365,29 @@ static BPTR open_rel(struct DosLibrary *DOSBase, BPTR dir, CONST_STRPTR name)
 
 /* ---- binding --------------------------------------------------------------------- */
 
+/* With the variable WXTK_DEBUG set, each step of binding is written to the
+ * program's output. */
+static int tracing(struct WXTKBase *base)
+{
+    DOS(base);
+    char v[4];
+    return GetVar((CONST_STRPTR)"WXTK_DEBUG", (STRPTR)v, sizeof v, 0) >= 0;
+}
+static void trace(struct WXTKBase *base, int on, const char *what, ULONG n)
+{
+    DOS(base);
+    char t[80], *d = t;
+    BPTR out;
+    int s;
+    if (!on || !(out = Output())) return;
+    for (const char *a = "openwxtoolkit: "; *a; ) *d++ = *a++;
+    while (*what && d < t + 64) *d++ = *what++;
+    *d++ = ' '; *d++ = '$';
+    for (s = 28; s >= 0; s -= 4) *d++ = "0123456789abcdef"[(n >> s) & 15];
+    *d++ = '\n';
+    Write(out, t, d - t);
+}
+
 /* fn() with A4 = a4, the caller's A4 back after; the result in D0. */
 static LONG call_a4(APTR fn, APTR a4)
 {
@@ -404,7 +427,7 @@ static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *bas
     BPTR fh = 0;
     ULONG i, delta;
     LONG rc = 20;
-    int counted = 0;
+    int counted = 0, tr = tracing(base);
 
     app->error[0] = 0;
     app->copy = NULL;
@@ -418,6 +441,10 @@ static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *bas
     if (mh) { base->users++; counted = 1; }
     ReleaseSemaphore(&base->lock);
     if (!mh) return 20;
+    trace(base, tr, "module at", (ULONG)mh);
+    trace(base, tr, "a4_init", (ULONG)mh->a4_init);
+    trace(base, tr, "data_size", mh->data_size);
+    trace(base, tr, "relocs", mh->relocs[0]);
 
     /* 1. the program's copy of the module's data */
     orig = mh->a4_init - WXTK_A4_OFFSET;
@@ -445,11 +472,13 @@ static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *bas
         }
     }
 
+    trace(base, tr, "copy at", (ULONG)copy);
     /* 3. the module's start, on the copy */
     if (call_a4((APTR)mh->entry, copy + WXTK_A4_OFFSET)) { say(app, "openwxtoolkit: the wx module didn't start", 0, 0, -1); goto out; }
     app->copy = copy;
     app->a4 = copy + WXTK_A4_OFFSET;
     app->header = mh;
+    trace(base, tr, "started", 0);
 
     /* 4. the program's stubs and data: the module's */
     for (i = 0; i < app->ncode; i++) {
@@ -489,6 +518,7 @@ static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *bas
         if (!i) goto out;
         app->fixed = p.fixed;
     }
+    trace(base, tr, "references turned", app->fixed);
     CacheClearU();
     rc = 0;
 out:

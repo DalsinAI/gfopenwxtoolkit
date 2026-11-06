@@ -94,6 +94,8 @@ void __wxtk_init(void)
     if (!wxtk_base) wxtk_fail("This program needs " WXTK_LIBNAME " (GFOpenWX Toolkit) in LIBS:");
     if (wxtk_bind(app)) wxtk_fail(app->error);
     __wxtk_a4 = app->a4;
+    if (GetVar((CONST_STRPTR)"WXTK_DEBUG", (STRPTR)wxtk_progname, 4, 0) >= 0 && Output())
+        Write(Output(), (APTR)"openwxtoolkit: bound\n", 21);
 }
 ADD2INIT(__wxtk_init, -6);
 ADD2EXIT(__wxtk_exit, -6);
