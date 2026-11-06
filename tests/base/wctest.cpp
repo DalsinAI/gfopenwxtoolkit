@@ -20,6 +20,9 @@
 
 int main(int argc, char **argv)
 {
+    // each line as it is made, so a hang shows where it stopped
+    setvbuf(stdout, NULL, _IONBF, 0);
+    printf("     starting wx\n");
     wxInitializer init(argc, argv);
     const wchar_t *w = L"abc,def";
     printf("sizeof(wchar_t)=%d L'a'=%ld\n", (int)sizeof(wchar_t), (long)w[0]);
@@ -116,5 +119,6 @@ int main(int argc, char **argv)
         printf("CreateTempFileName='%s'\n", (const char *)tn.utf8_str());
         if (!tn.empty()) wxRemoveFile(tn);
     }
+    printf("wctest: done\n");
     return 0;
 }
