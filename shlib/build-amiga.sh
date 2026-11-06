@@ -54,6 +54,11 @@ for v in o2 os baserel; do
     figures "$v" "$W"; echo "$SHA" > "$F/$v/.done"
     cat "$F/$v/sizes.txt"
 done
+# the lab's timer: runs a command N times, E-clock ms each
+m68k-amigaos-gcc -noixemul -m68040 -Os -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$F/wxtime" "$HERE/tests/amiga/wxtime.c" \
+    && echo "wxtime built"
+echo "== figures"; ls -l "$F" "$F"/* 2>&1 | head -60
+echo "== the ports' tree"; ls -l "$C/build" "$C/build/out" 2>&1 | head -20
 cat "$F/before/sizes.txt" 2>/dev/null | head -40
 : > "$OUTD/exit-0"
 exit 0
