@@ -54,15 +54,8 @@ export REGEX_SRC OXP_SRC
 TOOLCHAIN="$STOVE/prefix" WORK="$WORK" OUT="$OUT" JOBS=$JOBS sh "$HERE/scripts/build-base.sh"
 
 # GFOpenLayout UI (libolui.a), as gfopenlayout's build-ui-amiga.sh builds it
-CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
-U="$WORK/olui"; mkdir -p "$U/obj"
-F="-m68040 -specs=$HERE/scripts/m68k-soft-m68040.specs -noixemul -O2 -fno-delete-null-pointer-checks -fno-late-combine-instructions -std=gnu99 -I$OLUI_SRC/include -I$OLUI_SRC/ui -I$OGT/lib"
-for f in src/openlayout.c src/gfcss_parse.c src/gfcss_values.c src/gfcss_select.c src/openlayout_css.c \
-         ui/olui.c ui/olui_css.c ui/olui_markup.c ui/olui_theme.c amiga/olui_amiga.c; do
-    "$CC" $F -c "$OLUI_SRC/$f" -o "$U/obj/$(basename "$f" .c).o"
-done
-"$CC" $F -Wno-sign-compare -c "$OGT/lib/ogt_theme.c" -o "$U/obj/ogt_theme.o"
-rm -f "$U/libolui.a"; "$STOVE/prefix/bin/m68k-amigaos-ar" rcs "$U/libolui.a" "$U"/obj/*.o
+STOVE="$STOVE" WORK="$WORK" OLUI_SRC="$OLUI_SRC" OGT="$OGT" sh "$HERE/scripts/build-olui.sh"
+U="$WORK/olui"
 
 TOOLCHAIN="$STOVE/prefix" WORK="$WORK" OUT="$OUT" JOBS=$JOBS OLUI="$OLUI_SRC/include" OLUI_LIB="$U/libolui.a" \
     sh "$HERE/scripts/build-gui.sh" 2>&1 | grep -v 'duplicate section' | tail -40

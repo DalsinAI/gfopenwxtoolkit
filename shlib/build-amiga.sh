@@ -58,6 +58,12 @@ for v in baserel os o2; do
     if [ "$v" = baserel ] && [ -f "$W/out/xrcstart" ] && [ -f "$W/out/sdk/bin/wx-config" ]; then
         # wx is built: only the library, its module and the programs on it
         # (its steps go on where a run cut short stopped)
+        # (GFOpenLayout UI again when it isn't -fbaserel32 yet)
+        if [ ! -f "$W/olui/.baserel" ]; then
+            env $env STOVE="$STOVE" WORK="$W" OLUI_SRC="$W/deps/gfopenlayout" OGT="$W/deps/amicradle-guest/libraries/opengadtools" \
+                sh "$HERE/scripts/build-olui.sh" > "$OUTD/build-olui.log" 2>&1 && : > "$W/olui/.baserel" || { tail -n 20 "$OUTD/build-olui.log"; }
+            echo "olui rebuilt -fbaserel32: $(ls -l "$W/olui/libolui.a")"
+        fi
         env $env WORK="$W" OUT="$W/out" TOOLCHAIN="$STOVE/prefix" nice -n 19 timeout "$left" sh "$HERE/scripts/build-library.sh" > "$OUTD/build-$v.log" 2>&1
     else
     env $env JOBS=6 WORK="$W" OUT="$W/out" nice -n 19 timeout "$left" sh "$HERE/build-amiga.sh" > "$OUTD/build-$v.log" 2>&1
