@@ -124,9 +124,29 @@ static APTR wxtk_call2(APTR fn, APTR a, APTR b)
     return r0;
 }
 
+
+static void wxtk_say(const char *what, APTR a, APTR b)
+{
+    static const char hex[] = "0123456789abcdef";
+    char buf[80], *p = buf;
+    ULONG v[2], k, i;
+    BPTR out = Output();
+    if (!wxtk_debug || !out) return;
+    while (*what) *p++ = *what++;
+    v[0] = (ULONG)a; v[1] = (ULONG)b;
+    for (k = 0; k < 2; k++) {
+        *p++ = ' '; *p++ = '$';
+        for (i = 0; i < 8; i++) *p++ = hex[(v[k] >> (28 - 4 * i)) & 15];
+    }
+    *p++ = '\n';
+    Write(out, buf, p - buf);
+}
+
 void __register_frame_info(const void *begin, void *ob)
 {
+    wxtk_say("openwxtoolkit: program EH frames", (APTR)begin, wxtk_reg_fi);
     if (wxtk_reg_fi) wxtk_call2(wxtk_reg_fi, (APTR)begin, ob);
+    wxtk_say("openwxtoolkit: registered", (APTR)begin, ob);
 }
 
 void *__deregister_frame_info(const void *begin)
@@ -156,7 +176,12 @@ void __wxtk_init(void)
     __wxtk_a4 = app->a4;
     wxtk_reg_fi = wxtk_target("___register_frame_info");
     wxtk_dereg_fi = wxtk_target("___deregister_frame_info");
-    wxtk_debug = GetVar((CONST_STRPTR)"WXTK_DEBUG", (STRPTR)wxtk_progname, 4, 0) >= 0;
+    {
+        char v[4];
+        wxtk_debug = GetVar((CONST_STRPTR)"WXTK_DEBUG", (STRPTR)v, sizeof v, 0) >= 0;
+        /* (a test: the program's own exception tables left out) */
+        if (GetVar((CONST_STRPTR)"WXTK_NOEH", (STRPTR)v, sizeof v, 0) >= 0) wxtk_reg_fi = wxtk_dereg_fi = NULL;
+    }
     if (wxtk_debug && Output())
         Write(Output(), (APTR)"openwxtoolkit: bound\n", 21);
 }
