@@ -103,6 +103,10 @@ fi
 # everything the lab needs, as this job's files
 mkdir -p "$OUTD/lab"
 for v in o2 os baserel; do [ -d "$F/$v" ] && cp -a "$F/$v" "$OUTD/lab/"; done
+# (temporary) how the module gives wx's event types (each program's own?)
+echo "== event types in exports.txt"
+grep -E "wxEVT_(ASYNC_METHOD_CALL|BUTTON|CLOSE_WINDOW|IDLE) " "$BW/library/exports.txt" 2>/dev/null || find "$BW" -name exports.txt
+grep -E "wxEVT_(ASYNC_METHOD_CALL|BUTTON)$" "$BW/library/mod1.t" 2>/dev/null
 # (temporary) the static -Os GUI tests, to set the shared ones beside
 mkdir -p "$OUTD/lab/static"
 for f in xrcstart ctorbox imgtest minimal; do [ -f "$C/library-build-os/out/$f" ] && cp "$C/library-build-os/out/$f" "$OUTD/lab/static/"; done
