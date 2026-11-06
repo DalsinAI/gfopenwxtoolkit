@@ -31,14 +31,30 @@ if [ "$(cat "$SRC/.patched" 2>/dev/null)" != "$PSUM" ]; then
     T="$WORK/wxWidgets-$WX_VERSION.tar.bz2"
     [ -f "$T" ] || curl -sSfL -o "$T" "$WX_URL"
     echo "$WX_SHA256  $T" | sha256sum -c - >/dev/null
-    rm -rf "$SRC"; tar xjf "$T" -C "$WORK"
-    for p in "$HERE"/patches/*.patch; do patch -s -d "$SRC" -p1 < "$p"; done
+    # made in a new tree, then only the files that differ go into the old
+    # one: the rest keep their times, so make rebuilds only what a patch
+    # touched
+    NEW="$WORK/wx-new"; rm -rf "$NEW"; mkdir -p "$NEW"
+    tar xjf "$T" -C "$NEW"
+    for p in "$HERE"/patches/*.patch; do patch -s -d "$NEW/wxWidgets-$WX_VERSION" -p1 < "$p"; done
+    if [ -d "$SRC" ]; then
+        (cd "$NEW/wxWidgets-$WX_VERSION" && find . -type f) | while read -r f; do
+            cmp -s "$NEW/wxWidgets-$WX_VERSION/$f" "$SRC/$f" || { mkdir -p "$(dirname "$SRC/$f")"; cp -p "$NEW/wxWidgets-$WX_VERSION/$f" "$SRC/$f"; touch "$SRC/$f"; echo "patched: $f"; }
+        done
+        rm -rf "$NEW"
+    else
+        mv "$NEW/wxWidgets-$WX_VERSION" "$SRC"; rm -rf "$NEW"
+    fi
     echo "$PSUM" > "$SRC/.patched"
 fi
 
 B="$WORK/base"
-# configured again when this script, amigacompat.h or the patches change
-CSUM=$( (cat "$0" "$COMPAT"; echo "$PSUM") | sha256sum | cut -c1-16)
+# configured again when CONF, the flags, amigacompat.h or the configure patch change
+# (of the patches, only the one to configure: the others are sources, which
+# make follows). CONF names how it is configured: change it with the
+# configure line, so other edits here don't make it all again
+CONF="configure-2"
+CSUM=$( (echo "$CONF $FLAGS $INC $SPECS"; cat "$COMPAT" "$HERE"/patches/0001-*.patch) | sha256sum | cut -c1-16)
 if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
     rm -rf "$B"; mkdir -p "$B"
     # libnix's wcsftime is a stub that returns 0: wx then uses strftime.

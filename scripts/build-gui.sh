@@ -21,9 +21,20 @@ cmp -s "$G/wx/setup.h.new" "$G/wx/setup.h" || mv "$G/wx/setup.h.new" "$G/wx/setu
 rm -f "$G/wx/setup.h.new"
 SUM=$( (cat "$HERE/scripts/add-toolkit.py" "$HERE/config/toolkit-edits.txt" "$SRC/.patched"; ls "$HERE/include/wx/openlayout") | sha256sum | cut -c1-16)
 if [ "$(cat "$T/.toolkit" 2>/dev/null)" != "$SUM" ]; then
-    rm -rf "$T" "$G/obj"; mkdir -p "$G/obj"
-    cp -a "$SRC" "$T"
-    python3 "$HERE/scripts/add-toolkit.py" "$T" "$HERE"
+    NEWT="$WORK/wxgui-new"; rm -rf "$NEWT"
+    cp -a "$SRC" "$NEWT"
+    python3 "$HERE/scripts/add-toolkit.py" "$NEWT" "$HERE"
+    if [ -f "$T/.toolkit" ]; then
+        # only the files that differ go into the old tree, so make rebuilds
+        # only the objects they reach (-MMD follows the headers)
+        (cd "$NEWT" && find . -type f ! -name .toolkit) | while read -r f; do
+            cmp -s "$NEWT/$f" "$T/$f" || { mkdir -p "$(dirname "$T/$f")"; cp -p "$NEWT/$f" "$T/$f"; touch "$T/$f"; echo "changed: $f"; }
+        done
+        rm -rf "$NEWT"
+    else
+        rm -rf "$T" "$G/obj"; mkdir -p "$G/obj"
+        mv "$NEWT" "$T"
+    fi
     echo "$SUM" > "$T/.toolkit"
 fi
 
