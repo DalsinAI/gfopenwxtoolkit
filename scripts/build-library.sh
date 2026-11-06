@@ -41,7 +41,7 @@ fi
 # (the key covers what the kept steps are made from: the program's side
 # below them is made again every run)
 KEY=$( (ls -l --time-style=+%s $ARCH; cat "$HERE/scripts/wxtk-gen.py" "$HERE/src/library/wxtk_module_rt.c" "$HERE/src/library/wxtoolkit_library.h"
-        sed -n '/^modlink()/,/^}/p' "$0"; echo "$CF ${WXTK_ARCHIVES:-}") | sha256sum | cut -c1-16)
+        sed -n '/^modlink()/,/^}/p' "$0"; echo "$CF ${WXTK_ARCHIVES:-} ${WXTK_SLOTCHECK:-}") | sha256sum | cut -c1-16)
 if [ "$(cat "$L/.key" 2>/dev/null)" != "$KEY" ]; then rm -rf "$L"; fi
 mkdir -p "$L"; echo "$KEY" > "$L/.key"
 done_() { [ -f "$L/.done-$1" ]; }

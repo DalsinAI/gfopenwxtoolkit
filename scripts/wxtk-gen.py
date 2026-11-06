@@ -341,8 +341,17 @@ def emit(outdir, rtprobe_t):
     w("\tmove.l a4,-(sp)\n\tmove.l 8(sp),a0\n\tmove.l 8(a0),a4\n\tmove.l a0,-(sp)\n"
       "\tjsr _wxtk_thread_run\n\taddq.l #4,sp\n\tmove.l (sp)+,a4\n\trts\n")
     # a C library call: through its slot in this program's copy
+    # (WXTK_SLOTCHECK=1, a test build: a call made with A4 not on a copy
+    # jumps to its caller + 1, so the address error names the caller)
+    check = os.environ.get("WXTK_SLOTCHECK") == "1"
     for i, n in enumerate(impc):
-        w("\t.globl %s\n%s:\tmove.l __wxtk_s%d:L(a4),a0\n\tjmp (a0)\n" % (n, n, i))
+        if check:
+            w("\t.globl %s\n%s:\tcmp.l #0x57585443,__wxtk_magic:L(a4)\n\tbne.w Lbadcopy\n" % (n, n))
+            w("\tmove.l __wxtk_s%d:L(a4),a0\n\tjmp (a0)\n" % i)
+        else:
+            w("\t.globl %s\n%s:\tmove.l __wxtk_s%d:L(a4),a0\n\tjmp (a0)\n" % (n, n, i))
+    if check:
+        w("Lbadcopy:\tmove.l (sp),a0\n\taddq.l #1,a0\n\tjmp (a0)\n")
     w("\t.align 2\nLexph:\n")
     for h in hashes:
         w("\t.long 0x%08x\n" % h)
@@ -367,7 +376,7 @@ def emit(outdir, rtprobe_t):
     w("Lnames:\n")
     for n in impc + [x for x, _ in impd]:
         w("\t.asciz \"%s\"\n" % n)
-    w("\t.data\n\t.align 2\nLslots:\n")
+    w("\t.data\n\t.align 2\n__wxtk_magic:\t.long 0x57585443\nLslots:\n")
     for i in range(len(impc)):
         w("__wxtk_s%d:\t.long 0\n" % i)
     # what no C library has: an ILLEGAL instruction, in data so the same
