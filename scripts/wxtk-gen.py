@@ -191,7 +191,8 @@ def link(outdir, mod_t, mod_log):
                          "weak": d["weak"] if d else ("w" in flags and "g" not in flags),
                          "size": max(min(size, 1 << 20), 2)}
     missing = undefined_in(mod_log)
-    imports = sorted("_" + n for n in missing if not PRIVATE.match("_" + n))
+    # (ld names them as linked, with C's leading underscore)
+    imports = sorted(n for n in missing if not PRIVATE.match(n))
     for n in imports:
         if n in exports:
             sys.exit("wxtk-gen: %s is both given and taken" % n)
