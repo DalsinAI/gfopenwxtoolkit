@@ -116,8 +116,7 @@ if [ -x "$OUT/sdk/bin/wx-config" ]; then
         # shellcheck disable=SC2046
         WXTK_SHARED=1 m68k-amigaos-g++ $APPF $(WXTK_SHARED=1 "$W" --cxxflags) -I"$WORK/wxgui/samples" -c "$2" -o "$L/$1.o"
         # shellcheck disable=SC2046
-        WXTK_SHARED=1 m68k-amigaos-g++ -noixemul -m68040 -specs="$SPECS" -o "$S/$1" "$L/$1.o" $(WXTK_SHARED=1 "$W" --libs std)
-        m68k-amigaos-strip "$S/$1"
+        WXTK_SHARED=1 m68k-amigaos-g++ -noixemul -m68040 -specs="$SPECS" -s -o "$S/$1" "$L/$1.o" $(WXTK_SHARED=1 "$W" --libs std)
     }
     build minimal "$WORK/wxgui/samples/minimal/minimal.cpp"
     for t in basetest wctest sockettest; do build "$t" "$HERE/tests/base/$t.cpp"; done
