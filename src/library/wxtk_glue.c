@@ -64,7 +64,7 @@ static void wxtk_fail(const char *msg)
     exit(20);
 }
 
-static void wxtk_exit(void)
+void __wxtk_exit(void)
 {
     struct WXTKApp *app = &__wxtk_app;
     if (wxtk_base) {
@@ -96,4 +96,4 @@ void __wxtk_init(void)
     __wxtk_a4 = app->a4;
 }
 ADD2INIT(__wxtk_init, -6);
-ADD2EXIT(wxtk_exit, -6);
+ADD2EXIT(__wxtk_exit, -6);
