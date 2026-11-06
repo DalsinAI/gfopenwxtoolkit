@@ -13,8 +13,8 @@ the wx module (src/library/wxtoolkit_library.h).
                       program's C library, to link a probe program with
   wxtk-gen.py prune OUTDIR LINK.log
       after a probe program's link (--no-demangle) that named what nothing
-      defines, leaves out the members that need such a symbol, and writes
-      the three files again
+      defines: those symbols get trapping stand-ins in the module instead of
+      being imports, and the three files are written again
   wxtk-gen.py emit OUTDIR RTPROBE.t
       reads the probe program's symbol table (objdump -t: where each C
       library symbol lives, so code from data) and writes
@@ -156,28 +156,12 @@ def scan(outdir, archives, extras):
     write_selection(outdir, chosen, None)
 
 
-def write_selection(outdir, chosen, good):
-    """members.rsp, symbols.json and rtprobe.s for these members. With good
-    (the C library symbols a probe program found), a member that needs a
-    symbol neither the module nor the C library has is left out, and so on
-    until none does: wx files for things this build has no backend for
-    (wxPostScriptDC) never reach the module, as no static link takes them."""
-    chosen = list(chosen)
-    dropped = []
-    while True:
-        defined = set()
-        for mi in chosen:
-            defined.update(mi["defs"])
-        if good is None:
-            break
-        bad = [mi for mi in chosen if mi["arch"] >= 0 and
-               any(u not in defined and u not in good and not PRIVATE.match(u) for u in mi["undef"])]
-        if not bad:
-            break
-        for mi in bad:
-            miss = sorted(u for u in mi["undef"] if u not in defined and u not in good and not PRIVATE.match(u))
-            dropped.append("%s (%s)" % (os.path.basename(mi["path"]), miss[0]))
-        chosen = [mi for mi in chosen if mi not in bad]
+def write_selection(outdir, chosen, missing):
+    """members.rsp, symbols.json and rtprobe.s for these members. missing:
+    what a probe program found nothing defines (wx files for backends this
+    build lacks, as wxPostScriptDC). The module gets a stand-in for each that
+    traps if used, as a static link of a program using them fails."""
+    missing = set(missing or ())
     defs, undef, lists = {}, set(), set()
     for mi in chosen:
         lists.update(mi["lists"])
@@ -189,19 +173,22 @@ def write_selection(outdir, chosen, good):
             if old and not old["weak"]:
                 continue
             defs[n] = d
-    imports = sorted(n for n in undef if n not in defs and not PRIVATE.match(n))
+    allimp = sorted(n for n in undef if n not in defs and not PRIVATE.match(n))
+    imports = [n for n in allimp if n not in missing]
+    absent = [n for n in allimp if n in missing]
     with open(os.path.join(outdir, "members.rsp"), "w") as f:
         f.write("\n".join(mi["path"] for mi in chosen) + "\n")
     with open(os.path.join(outdir, "symbols.json"), "w") as f:
-        json.dump({"exports": defs, "imports": imports}, f)
+        json.dump({"exports": defs, "imports": imports, "absent": absent}, f)
     with open(os.path.join(outdir, "rtprobe.s"), "w") as f:
         f.write("\t.text\n\t.globl _wxtk_rtprobe\n_wxtk_rtprobe:\n")
         for n in imports:
             f.write("\t.long %s\n" % n)
     nweak = sum(1 for d in defs.values() if d["weak"])
     ncode = sum(1 for d in defs.values() if d["kind"] == "code")
-    if dropped:
-        print("wxtk-gen: %d members left out for symbols nothing defines: %s" % (len(dropped), " ".join(dropped)))
+    if absent:
+        print("wxtk-gen: %d symbols nothing defines, trapping stand-ins in the module: %s"
+              % (len(absent), " ".join(absent)))
     print("wxtk-gen: %d members, %d exports (%d code, %d data, %d weak), %d imports"
           % (len(chosen), len(defs), ncode, len(defs) - ncode, nweak, len(imports)))
     if lists:
@@ -209,21 +196,17 @@ def write_selection(outdir, chosen, good):
 
 
 def prune(outdir, missing_txt):
-    """after a probe program's link named what nothing defines (ld's
-    "undefined reference to `X'" lines, with --no-demangle): keep the
-    members whose every need is met"""
+    """after a probe program's link (--no-demangle) named what nothing
+    defines ("undefined reference to `X'"): those become the module's own
+    trapping stand-ins instead of imports"""
     missing = set()
     for line in open(missing_txt, errors="replace"):
         m = re.search(r"undefined reference to [`'\"]([^'`\"]+)['`\"]", line)
         if m:
             missing.add(m.group(1))
             missing.add("_" + m.group(1))
-    sym = json.load(open(os.path.join(outdir, "symbols.json")))
-    good = set(sym["imports"]) - missing
-    if not missing:
-        print("wxtk-gen: the probe found every symbol")
     chosen = json.load(open(os.path.join(outdir, "members.json")))
-    write_selection(outdir, chosen, good)
+    write_selection(outdir, chosen, missing)
 
 
 def emit(outdir, rtprobe_t):
@@ -295,6 +278,12 @@ def emit(outdir, rtprobe_t):
     w("Lnames:\n")
     for n in impc + [x for x, _ in impd]:
         w("\t.asciz \"%s\"\n" % n)
+    # what nothing defines: an ILLEGAL instruction, in data so the same
+    # stand-in serves a call and a read
+    w("\t.data\n\t.align 2\n")
+    for n in sym.get("absent", []):
+        w("\t.globl %s\n%s:\t.short 0x4afc\n\t.skip 62\n" % (n, n))
+    w("\t.text\n")
     w("\t.align 2\n\t.bss\n\t.align 2\nLimpd:\n")
     for n, size in impd:
         w("\t.globl %s\n%s:\t.skip %d\n" % (n, n, size))

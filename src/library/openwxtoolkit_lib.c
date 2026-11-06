@@ -147,6 +147,7 @@ static LONG which(const ULONG *off, ULONG n, ULONG rel)
 /* ---- a hunk file, read through a buffer ------------------------------------------- */
 
 struct rd {
+    struct ExecBase *sys;
     struct DosLibrary *dos;
     BPTR fh;
     UBYTE *buf;
@@ -184,6 +185,7 @@ static UWORD rd_word(struct rd *r)
 /* n bytes into dst (NULL: skipped) */
 static void rd_bytes(struct rd *r, UBYTE *dst, ULONG n)
 {
+    struct ExecBase *SysBase = r->sys;
     struct DosLibrary *DOSBase = r->dos;
     while (n && !r->bad) {
         if (r->pos < r->len) {
@@ -376,7 +378,7 @@ static LONG WXTK_Bind(REG(a0, struct WXTKApp *app), REG(a6, struct WXTKBase *bas
     /* 1. the module, a copy for this program */
     fh = Open((CONST_STRPTR)WXTK_MODULE, MODE_OLDFILE);
     if (!fh) { say(app, "openwxtoolkit: can't open " WXTK_MODULE, 0, 0, -1); goto out; }
-    r.dos = base->dos; r.fh = fh; r.buf = buf; r.len = r.pos = 0; r.bad = 0;
+    r.sys = base->sys; r.dos = base->dos; r.fh = fh; r.buf = buf; r.len = r.pos = 0; r.bad = 0;
     w.app = app; w.base = NULL; w.size = NULL; w.nh = 0; w.load = 1; w.fixed = 0;
     {
         CONST_STRPTR keep = app->name;
