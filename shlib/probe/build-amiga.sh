@@ -11,18 +11,9 @@ WORK="$W" OUT="$OUTD" timeout 800 sh "$HERE/scripts/test-library.sh" > "$OUTD/bu
 rc=$?
 L="$W/library"
 { echo "== exit $rc"; grep -v -e warning -e "^ *|" -e "^ *[0-9]* |" "$OUTD/build.log" | tail -n 20
-  echo "== init list entries in the program's libraries"
-  d=$(mktemp -d); cd "$d"
-  for l in libpthread.a libnix.a libstubs.a libnix20.a libamiga.a libsocket.a libatomic.a; do
-    a=$(m68k-amigaos-gcc -noixemul -m68040 -print-file-name=$l); [ -f "$a" ] || continue
-    rm -f ./*; m68k-amigaos-ar x "$a" 2>/dev/null
-    for o in *.o; do
-      m68k-amigaos-objdump -h "$o" 2>/dev/null | grep -q "list___INIT_LIST__" || continue
-      r=$(m68k-amigaos-objdump -r -j .list___INIT_LIST__ "$o" | awk '/RELOC32/{print $3}' | tr '\n' ' ')
-      v=$(m68k-amigaos-objdump -s -j .list___INIT_LIST__ "$o" | grep '^ 0000' | awk '{print $3}')
-      echo "$l $o: $r pri $v"
-    done
-  done; cd - >/dev/null
+  echo "== shapes.o"; m68k-amigaos-objdump -h "$W/t/shapes.o" | grep -v "^ *CONTENTS"; m68k-amigaos-objdump -t "$W/t/shapes.o" | grep -v " l "
+  echo "== data-sections"; m68k-amigaos-g++ -noixemul -m68040 -O2 -std=gnu++17 -fbaserel32 -fdata-sections -c "$HERE/tests/library/shapes.cpp" -o "$W/t/ds.o" && m68k-amigaos-objdump -t "$W/t/ds.o" | grep -e shape_names -e made -e greeting
+  m68k-amigaos-g++ -noixemul -m68040 -O2 -std=gnu++17 -fbaserel32 -S -o - "$HERE/tests/library/shapes.cpp" | grep -n -B3 -A6 "^_shape_names:"
 } > "$OUTD/probe.log" 2>&1
 tail -n 30 "$OUTD/build.log"
 : > "$OUTD/exit-$rc"
