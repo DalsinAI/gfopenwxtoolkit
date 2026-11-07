@@ -1,0 +1,38 @@
+wxWidgets 3.2.12 sockets on AmigaOS: wx makes a socket non-blocking (FIONBIO)
+in PostCreation, before bind(). On the Amiga's stack a datagram socket bound
+after that read as blocking again, so RecvFrom with wxSOCKET_NOWAIT or a
+timeout never returned (OpenCPN's UDP readers). Say it again after bind().
+
+--- a/src/common/socket.cpp
++++ b/src/common/socket.cpp
+@@ -414,6 +414,10 @@
+     // FIXME: should we test for m_dobind here?
+     if ( bind(m_fd, m_local.GetAddr(), m_local.GetLen()) != 0 )
+         m_error = wxSOCKET_IOERR;
++#ifdef __AMIGA__
++    else
++        UpdateBlockingState(); // the stack forgets FIONBIO given before bind()
++#endif
+ 
+     if ( IsOk() )
+     {
+@@ -455,6 +459,9 @@
+             m_error = wxSOCKET_IOERR;
+             return m_error;
+         }
++#ifdef __AMIGA__
++        UpdateBlockingState(); // the stack forgets FIONBIO given before bind()
++#endif
+     }
+ 
+     // Do connect now
+@@ -514,6 +521,9 @@
+             m_error = wxSOCKET_IOERR;
+             return m_error;
+         }
++#ifdef __AMIGA__
++        UpdateBlockingState(); // the stack forgets FIONBIO given before bind()
++#endif
+ 
+         return UpdateLocalAddress();
+     }

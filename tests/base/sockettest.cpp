@@ -243,6 +243,29 @@ int main(int argc, char **argv)
     fflush(stdout);
     Check(ms >= 1500 && ms < 5000 && quiet.LastError() == wxSOCKET_TIMEDOUT, "datagram: read gives up after its timeout");
 
+    // which order the stack keeps FIONBIO in: bind then FIONBIO, and FIONBIO
+    // then bind (wx's order); a read that stands still shows here last
+    for ( int order = 0; order < 2; order++ )
+    {
+        int raw = socket(AF_INET, SOCK_DGRAM, 0);
+        struct sockaddr_in ra;
+        memset(&ra, 0, sizeof ra);
+        ra.sin_family = AF_INET;
+        ra.sin_addr.s_addr = htonl(INADDR_ANY);
+        int one = 1;
+        if ( order == 1 )
+            ioctl(raw, FIONBIO, &one);
+        bind(raw, (struct sockaddr *)&ra, sizeof ra);
+        if ( order == 0 )
+            ioctl(raw, FIONBIO, &one);
+        printf("     raw %s: reading\n", order ? "FIONBIO then bind" : "bind then FIONBIO");
+        char rb[8];
+        errno = 0;
+        int rc = (int)recvfrom(raw, rb, sizeof rb, 0, NULL, NULL);
+        printf("     raw %s: rc=%d errno=%d\n", order ? "FIONBIO then bind" : "bind then FIONBIO", rc, errno);
+        close(raw);
+    }
+
     wxSocketBase::Shutdown();
     printf("sockettest: %d of %d passed\n", g_pass, g_total);
     return g_pass == g_total ? 0 : 5;
