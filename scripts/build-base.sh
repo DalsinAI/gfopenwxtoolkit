@@ -66,7 +66,7 @@ B="$WORK/base"
 # (of the patches, only the one to configure: the others are sources, which
 # make follows). CONF names how it is configured: change it with the
 # configure line, so other edits here don't make it all again
-CONF="configure-3"
+CONF="configure-4"
 CSUM=$( (echo "$CONF $FLAGS $INC $SPECS"; cat "$COMPAT" "$HERE"/patches/0001-*.patch) | sha256sum | cut -c1-16)
 if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
     rm -rf "$B"; mkdir -p "$B"
@@ -79,13 +79,18 @@ if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
         --disable-gui --disable-shared --enable-unicode --disable-sys-libs \
         --with-zlib=builtin --with-regex=builtin --with-expat=builtin \
         --enable-dynlib --disable-dynamicloader --enable-threads --disable-tests \
-        --enable-sockets --disable-ipv6 --disable-ipc --disable-webrequest --without-subdirs > configure.log 2>&1) \
+        --enable-sockets --disable-ipv6 --enable-ipc --disable-webrequest --without-subdirs > configure.log 2>&1) \
         || { tail -30 "$B/configure.log"; exit 1; }
     # static only: no position-independent code (m68k-amigaos has no GOT)
     sed -i 's/ -fPIC -DPIC//; s/^PIC_FLAG = .*/PIC_FLAG =/' "$B/Makefile"
     # wx's XML code reads our expat.h (Expat's calls, served by OXP), not its copy's
     sed -i "s|-I\$(top_srcdir)/src/expat/expat/lib|-I$HERE/src/amiga/expat|" "$B/Makefile"
     grep -q "$HERE/src/amiga/expat" "$B/Makefile" || { echo "expat include not replaced" >&2; exit 1; }
+    # wxFileSystemWatcher: configure finds neither inotify nor kqueue, but
+    # it is dos.library's notification here (patch 0017, fswatcherg.cpp)
+    SETUP=$(ls "$B"/lib/wx/include/*/wx/setup.h)
+    sed -i 's/^#define wxUSE_FSWATCHER .*/#define wxUSE_FSWATCHER 1/' "$SETUP"
+    grep -q '^#define wxUSE_FSWATCHER 1' "$SETUP" || { echo "wxUSE_FSWATCHER not set" >&2; exit 1; }
     echo "$CSUM" > "$B/.configured"
 fi
 (cd "$B" && nice -n 19 make -j"$JOBS" > make.log 2>&1) || { grep -E 'error' "$B/make.log" | head -40; exit 1; }

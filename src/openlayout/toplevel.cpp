@@ -762,6 +762,8 @@ void wxNonOwnedWindow::OLRunQueue()
         M_QUEUE.pop_front();
         q.ev.id = q.id.c_str();
         q.ev.value = q.ev.value ? q.value.c_str() : NULL;
+        wxOL_TRACE("olui event %d id '%s' value '%s' for %s", (int)q.ev.type, q.ev.id ? q.ev.id : "",
+                   q.ev.value ? q.ev.value : "", q.win ? (const char *)wxString(q.win->GetClassInfo()->GetClassName()).mb_str() : "nobody");
         if ( !q.win || wxOLPopupEvent(this, q.ev) )
             continue;
         if ( q.ev.type == OLUI_FOCUS )
@@ -1691,7 +1693,10 @@ int wxDialog::ShowModal()
 
     wxGUIEventLoop loop;
     m_modalLoop = &loop;
+    wxOL_TRACE("modal '%s' in (window open %d, enabled %d, parent %p)", (const char *)GetTitle().mb_str(),
+               OLGetWindow() != NULL, (int)IsEnabled(), (void *)GetParent());
     loop.Run();
+    wxOL_TRACE("modal '%s' out, code %d", (const char *)GetTitle().mb_str(), GetReturnCode());
     m_modalLoop = NULL;
     m_isModal = false;
     return GetReturnCode();
