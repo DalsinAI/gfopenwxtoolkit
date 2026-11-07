@@ -1,243 +1,618 @@
 /*
  * zlib's API for wx (and programs built with wx-config) on z.library
- * (GFOpenZlib): each call is the library's own, one LVO each, with the
- * stream in A0 (amicradle-guest libraries/openzlib/z.lvo). This file takes
- * the place of wx's built-in zlib (libwxzlib), so no zlib is compiled in.
- *
- * The init calls take no version or size (z.library is the version);
- * z.library allocates through AllocVec itself, so zalloc/zfree are not
- * called. z_stream is zlib.h's (56 bytes on the 68k), as z.library's is.
- * The library opens on the first call and closes when the program exits.
+ * (GFOpenZlib, amicradle-guest libraries/openzlib). From 53.13 on its jump
+ * table is the Aminet z.library's (z.lvo); the earlier stub here used
+ * GFOpenZlib's old table, so on 53.13 inflateInit2 (-132) landed on adler32
+ * and every gunzip (wxZlibInputStream) waited for ever. This is the same
+ * stub KiCad links (gfamiga_zlib.c): it refuses GFOpenZlib older than 53.13
+ * and computes the checksums itself when there is no z.library.
+ * This file takes the place of wx's built-in zlib (libwxzlib).
  *
  * Copyright (c) 2026 AmiCradle Team
  */
 #include <stdlib.h>
+#include <string.h>
+#include <exec/types.h>
 #include <exec/libraries.h>
 #include <proto/exec.h>
-#include <inline/macros.h>
 #include "zlib.h"
 
-static struct Library *ZBase;
+static struct Library* ZBase;
+static int             ZTried;
+static int             ZOwn;
 
-static void ZClose(void)
+static void z_close( void )
 {
-    if (ZBase)
-        CloseLibrary(ZBase);
-    ZBase = NULL;
-}
-
-static int ZOpen(void)
-{
-    if (!ZBase) {
-        ZBase = OpenLibrary((CONST_STRPTR)"z.library", 0);
-        if (ZBase)
-            atexit(ZClose);
+    if( ZBase )
+    {
+        CloseLibrary( ZBase );
+        ZBase = NULL;
     }
-    return ZBase != NULL;
 }
 
-#define Z_NOLIB Z_VERSION_ERROR
-
-const char *zlibVersion(void)
+static struct Library* z_base( void )
 {
-    if (!ZOpen())
-        return "0.0.0 (no z.library)";
-    return LP0(30, const char *, ZlibVersion, , ZBase);
+    if( !ZTried )
+    {
+        ZTried = 1;
+        ZBase = OpenLibrary( (CONST_STRPTR) "z.library", 0 );
+
+        if( ZBase )
+        {
+            const char* id = (const char*) ZBase->lib_IdString;
+            int gf = id && strstr( id, "GFOpenZlib" ) != NULL;
+
+            /* GFOpenZlib before 53.13 had its own guessed jump table, not
+             * the Aminet z.library's that these LVOs follow: don't use it */
+            if( gf && ( ZBase->lib_Version < 53
+                        || ( ZBase->lib_Version == 53 && ZBase->lib_Revision < 13 ) ) )
+            {
+                CloseLibrary( ZBase );
+                ZBase = NULL;
+            }
+            else
+            {
+                /* the calls past -270 are GFOpenZlib's own */
+                ZOwn = gf;
+                atexit( z_close );
+            }
+        }
+    }
+
+    return ZBase;
 }
 
-int deflateInit_(z_streamp s, int level, const char *version, int size)
+#define CLOBBER "cc", "memory", "fp0", "fp1"
+
+/* One call shape per register list in z.lvo. Every z.library call keeps
+ * d2-d7 and a2-a6 (the AmigaOS convention); d0, d1, a0 and a1 are scratch. */
+/* the offset must be a constant in the jsr, so each shape is a macro */
+#define Z_A0( lvo, p0 )                                                                            \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" );                                                 \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "=d"( _r ), "+a"( _a0 ) : "a"( _a6 )            \
+                        : "d1", "a1", CLOBBER );                                                   \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0D0( lvo, p0, v0 )                                                                      \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ), "+a"( _a0 ) : "a"( _a6 )            \
+                        : "d1", "a1", CLOBBER );                                                   \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0D0D1( lvo, p0, v0, v1 )                                                                \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register LONG            _d1 __asm( "d1" ) = (LONG) ( v1 );                                \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ), "+d"( _d1 ), "+a"( _a0 )            \
+                        : "a"( _a6 ) : "a1", CLOBBER );                                            \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0A1( lvo, p0, p1 )                                                                      \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" );                                                 \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register APTR            _a1 __asm( "a1" ) = (APTR) ( p1 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "=d"( _r ), "+a"( _a0 ), "+a"( _a1 )            \
+                        : "a"( _a6 ) : "d1", CLOBBER );                                            \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0A1D0( lvo, p0, p1, v0 )                                                                \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register APTR            _a1 __asm( "a1" ) = (APTR) ( p1 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ), "+a"( _a0 ), "+a"( _a1 )            \
+                        : "a"( _a6 ) : "d1", CLOBBER );                                            \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0A1A2( lvo, p0, p1, p2 )                                                                \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" );                                                 \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register APTR            _a1 __asm( "a1" ) = (APTR) ( p1 );                                \
+        register APTR            _a2 __asm( "a2" ) = (APTR) ( p2 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "=d"( _r ), "+a"( _a0 ), "+a"( _a1 ),           \
+                        "+a"( _a2 ) : "a"( _a6 ) : "d1", CLOBBER );                                \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0A1A2D0( lvo, p0, p1, p2, v0 )                                                          \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register APTR            _a1 __asm( "a1" ) = (APTR) ( p1 );                                \
+        register APTR            _a2 __asm( "a2" ) = (APTR) ( p2 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ), "+a"( _a0 ), "+a"( _a1 ),           \
+                        "+a"( _a2 ) : "a"( _a6 ) : "d1", CLOBBER );                                \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0A1A2D0D1( lvo, p0, p1, p2, v0, v1 )                                                    \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register LONG            _d1 __asm( "d1" ) = (LONG) ( v1 );                                \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register APTR            _a1 __asm( "a1" ) = (APTR) ( p1 );                                \
+        register APTR            _a2 __asm( "a2" ) = (APTR) ( p2 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ), "+d"( _d1 ), "+a"( _a0 ),           \
+                        "+a"( _a1 ), "+a"( _a2 ) : "a"( _a6 ) : CLOBBER );                         \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0A1A2A3( lvo, p0, p1, p2, p3 )                                                          \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" );                                                 \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register APTR            _a1 __asm( "a1" ) = (APTR) ( p1 );                                \
+        register APTR            _a2 __asm( "a2" ) = (APTR) ( p2 );                                \
+        register APTR            _a3 __asm( "a3" ) = (APTR) ( p3 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "=d"( _r ), "+a"( _a0 ), "+a"( _a1 ),           \
+                        "+a"( _a2 ), "+a"( _a3 ) : "a"( _a6 ) : "d1", CLOBBER );                   \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0D0D1D2D3D4( lvo, p0, v0, v1, v2, v3, v4 )                                             \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register LONG            _d1 __asm( "d1" ) = (LONG) ( v1 );                                \
+        register LONG            _d2 __asm( "d2" ) = (LONG) ( v2 );                                \
+        register LONG            _d3 __asm( "d3" ) = (LONG) ( v3 );                                \
+        register LONG            _d4 __asm( "d4" ) = (LONG) ( v4 );                                \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ), "+d"( _d1 ), "+d"( _d2 ),           \
+                        "+d"( _d3 ), "+d"( _d4 ), "+a"( _a0 ) : "a"( _a6 ) : "a1", CLOBBER );      \
+        _r;                                                                                        \
+    } )
+
+#define Z_A0D0D1D2D3( lvo, p0, v0, v1, v2, v3 )                                                   \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register LONG            _d1 __asm( "d1" ) = (LONG) ( v1 );                                \
+        register LONG            _d2 __asm( "d2" ) = (LONG) ( v2 );                                \
+        register LONG            _d3 __asm( "d3" ) = (LONG) ( v3 );                                \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ), "+d"( _d1 ), "+d"( _d2 ),           \
+                        "+d"( _d3 ), "+a"( _a0 ) : "a"( _a6 ) : "a1", CLOBBER );                   \
+        _r;                                                                                        \
+    } )
+
+#define Z_D0A0D1( lvo, v0, p0, v1 )                                                                \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register LONG            _d1 __asm( "d1" ) = (LONG) ( v1 );                                \
+        register APTR            _a0 __asm( "a0" ) = (APTR) ( p0 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ), "+d"( _d1 ), "+a"( _a0 )            \
+                        : "a"( _a6 ) : "a1", CLOBBER );                                            \
+        _r;                                                                                        \
+    } )
+
+#define Z_D0( lvo, v0 )                                                                            \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ) : "a"( _a6 )                         \
+                        : "d1", "a0", "a1", CLOBBER );                                             \
+        _r;                                                                                        \
+    } )
+
+#define Z_D0D1D2( lvo, v0, v1, v2 )                                                                \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" ) = (LONG) ( v0 );                                 \
+        register LONG            _d1 __asm( "d1" ) = (LONG) ( v1 );                                \
+        register LONG            _d2 __asm( "d2" ) = (LONG) ( v2 );                                \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "+d"( _r ), "+d"( _d1 ), "+d"( _d2 )            \
+                        : "a"( _a6 ) : "a0", "a1", CLOBBER );                                      \
+        _r;                                                                                        \
+    } )
+
+#define Z_NONE( lvo )                                                                              \
+    ( {                                                                                            \
+        register LONG            _r __asm( "d0" );                                                 \
+        register struct Library* _a6 __asm( "a6" ) = base;                                         \
+        __asm volatile( "jsr %%a6@(" #lvo ":W)" : "=d"( _r ) : "a"( _a6 )                         \
+                        : "d1", "a0", "a1", CLOBBER );                                             \
+        _r;                                                                                        \
+    } )
+
+#define BASE_OR( fail )                                                                            \
+    struct Library* base = z_base();                                                               \
+    if( !base )                                                                                    \
+        return fail;
+
+/* a call only GFOpenZlib has (past the Aminet table) */
+#define OWN_OR( fail )                                                                             \
+    BASE_OR( fail )                                                                                \
+    if( !ZOwn )                                                                                    \
+        return fail;
+
+/* zlib's version and stream checks, made here since z.library takes neither */
+static int z_version_ok( const char* version, int stream_size )
 {
-    (void)version; (void)size;
-    if (!ZOpen())
-        return Z_NOLIB;
-    return LP2(36, int, DeflateInit, z_streamp, s, a0, int, level, d0, , ZBase);
+    return version && version[0] == '1' && stream_size == (int) sizeof( z_stream );
 }
 
-int deflate(z_streamp s, int flush)
+/* ---- the calls, in z.lvo's order ---- */
+
+const char* zlibVersion( void )
 {
-    if (!ZOpen())
+    return ZLIB_VERSION;
+}
+
+int deflateInit_( z_streamp strm, int level, const char* version, int stream_size )
+{
+    if( !z_version_ok( version, stream_size ) )
+        return Z_VERSION_ERROR;
+
+    if( !strm )
         return Z_STREAM_ERROR;
-    return LP2(42, int, Deflate, z_streamp, s, a0, int, flush, d0, , ZBase);
+
+    BASE_OR( Z_MEM_ERROR )
+    return (int) Z_A0D0( -36, strm, level );
 }
 
-int deflateEnd(z_streamp s)
+int deflate( z_streamp strm, int flush )
 {
-    if (!ZOpen())
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0D0( -42, strm, flush );
+}
+
+int deflateEnd( z_streamp strm )
+{
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0( -48, strm );
+}
+
+int inflateInit_( z_streamp strm, const char* version, int stream_size )
+{
+    if( !z_version_ok( version, stream_size ) )
+        return Z_VERSION_ERROR;
+
+    if( !strm )
         return Z_STREAM_ERROR;
-    return LP1(48, int, DeflateEnd, z_streamp, s, a0, , ZBase);
+
+    BASE_OR( Z_MEM_ERROR )
+    return (int) Z_A0( -54, strm );
 }
 
-int inflateInit_(z_streamp s, const char *version, int size)
+int inflate( z_streamp strm, int flush )
 {
-    (void)version; (void)size;
-    if (!ZOpen())
-        return Z_NOLIB;
-    return LP1(54, int, InflateInit, z_streamp, s, a0, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0D0( -60, strm, flush );
 }
 
-int inflate(z_streamp s, int flush)
+int inflateEnd( z_streamp strm )
 {
-    if (!ZOpen())
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0( -66, strm );
+}
+
+int deflateInit2_( z_streamp strm, int level, int method, int windowBits, int memLevel,
+                   int strategy, const char* version, int stream_size )
+{
+    if( !z_version_ok( version, stream_size ) )
+        return Z_VERSION_ERROR;
+
+    if( !strm )
         return Z_STREAM_ERROR;
-    return LP2(60, int, Inflate, z_streamp, s, a0, int, flush, d0, , ZBase);
+
+    BASE_OR( Z_MEM_ERROR )
+    return (int) Z_A0D0D1D2D3D4( -72, strm, level, method, windowBits, memLevel, strategy );
 }
 
-int inflateEnd(z_streamp s)
+int deflateSetDictionary( z_streamp strm, const Bytef* dictionary, uInt dictLength )
 {
-    if (!ZOpen())
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0A1D0( -78, strm, dictionary, dictLength );
+}
+
+int deflateCopy( z_streamp dest, z_streamp source )
+{
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0A1( -84, dest, source );
+}
+
+int deflateReset( z_streamp strm )
+{
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0( -90, strm );
+}
+
+int deflateParams( z_streamp strm, int level, int strategy )
+{
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0D0D1( -96, strm, level, strategy );
+}
+
+int deflateTune( z_streamp strm, int good_length, int max_lazy, int nice_length, int max_chain )
+{
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0D0D1D2D3( -150, strm, good_length, max_lazy, nice_length, max_chain );
+}
+
+uLong deflateBound( z_streamp strm, uLong sourceLen )
+{
+    struct Library* base = z_base();
+
+    if( !base ) /* zlib's own bound, only ever used to size a buffer */
+        return sourceLen + ( sourceLen >> 12 ) + ( sourceLen >> 14 ) + ( sourceLen >> 25 ) + 13 + 6;
+
+    return (uLong) Z_A0D0( -156, strm, sourceLen );
+}
+
+int deflatePending( z_streamp strm, unsigned* pending, int* bits )
+{
+    OWN_OR( Z_STREAM_ERROR )
+    return (int) Z_A0A1A2( -276, strm, pending, bits );
+}
+
+int deflatePrime( z_streamp strm, int bits, int value )
+{
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0D0D1( -162, strm, bits, value );
+}
+
+int deflateSetHeader( z_streamp strm, gz_headerp head )
+{
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0A1( -168, strm, head );
+}
+
+int inflateInit2_( z_streamp strm, int windowBits, const char* version, int stream_size )
+{
+    if( !z_version_ok( version, stream_size ) )
+        return Z_VERSION_ERROR;
+
+    if( !strm )
         return Z_STREAM_ERROR;
-    return LP1(66, int, InflateEnd, z_streamp, s, a0, , ZBase);
+
+    BASE_OR( Z_MEM_ERROR )
+    return (int) Z_A0D0( -102, strm, windowBits );
 }
 
-int deflateInit2_(z_streamp s, int level, int method, int windowBits, int memLevel, int strategy,
-                  const char *version, int size)
+int inflateSetDictionary( z_streamp strm, const Bytef* dictionary, uInt dictLength )
 {
-    (void)version; (void)size;
-    if (!ZOpen())
-        return Z_NOLIB;
-    return LP6(72, int, DeflateInit2, z_streamp, s, a0, int, level, d0, int, method, d1,
-               int, windowBits, d2, int, memLevel, d3, int, strategy, d4, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0A1D0( -108, strm, dictionary, dictLength );
 }
 
-int deflateSetDictionary(z_streamp s, const Bytef *dict, uInt len)
+int inflateGetDictionary( z_streamp strm, Bytef* dictionary, uInt* dictLength )
 {
-    if (!ZOpen())
-        return Z_STREAM_ERROR;
-    return LP3(78, int, DeflateSetDictionary, z_streamp, s, a0, const Bytef *, dict, a1, uInt, len, d0, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0A1A2( -234, strm, dictionary, dictLength );
 }
 
-int deflateReset(z_streamp s)
+int inflateSync( z_streamp strm )
 {
-    if (!ZOpen())
-        return Z_STREAM_ERROR;
-    return LP1(90, int, DeflateReset, z_streamp, s, a0, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0( -144, strm );
 }
 
-int deflateParams(z_streamp s, int level, int strategy)
+int inflateCopy( z_streamp dest, z_streamp source )
 {
-    if (!ZOpen())
-        return Z_STREAM_ERROR;
-    return LP3(96, int, DeflateParams, z_streamp, s, a0, int, level, d0, int, strategy, d1, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0A1( -174, dest, source );
 }
 
-uLong deflateBound(z_streamp s, uLong sourceLen)
+int inflateReset( z_streamp strm )
 {
-    if (!ZOpen())
-        return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) + (sourceLen >> 25) + 13;
-    return LP2(108, uLong, DeflateBound, z_streamp, s, a0, uLong, sourceLen, d0, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0( -114, strm );
 }
 
-int inflateInit2_(z_streamp s, int windowBits, const char *version, int size)
+int inflateReset2( z_streamp strm, int windowBits )
 {
-    (void)version; (void)size;
-    if (!ZOpen())
-        return Z_NOLIB;
-    return LP2(132, int, InflateInit2, z_streamp, s, a0, int, windowBits, d0, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0D0( -252, strm, windowBits );
 }
 
-int inflateSetDictionary(z_streamp s, const Bytef *dict, uInt len)
+int inflatePrime( z_streamp strm, int bits, int value )
 {
-    if (!ZOpen())
-        return Z_STREAM_ERROR;
-    return LP3(138, int, InflateSetDictionary, z_streamp, s, a0, const Bytef *, dict, a1, uInt, len, d0, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0D0D1( -180, strm, bits, value );
 }
 
-int inflateSync(z_streamp s)
+long inflateMark( z_streamp strm )
 {
-    if (!ZOpen())
-        return Z_STREAM_ERROR;
-    return LP1(150, int, InflateSync, z_streamp, s, a0, , ZBase);
+    OWN_OR( -( 1L << 16 ) )
+    return (long) Z_A0( -282, strm );
 }
 
-int inflateReset(z_streamp s)
+/* z.library always checks the check value; turning the check off is a
+ * request zlib may refuse too, so it is answered as done */
+int inflateValidate( z_streamp strm, int check )
 {
-    if (!ZOpen())
-        return Z_STREAM_ERROR;
-    return LP1(162, int, InflateReset, z_streamp, s, a0, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0D0( -258, strm, check );
 }
 
-int inflateReset2(z_streamp s, int windowBits)
+int inflateGetHeader( z_streamp strm, gz_headerp head )
 {
-    if (!ZOpen())
-        return Z_STREAM_ERROR;
-    return LP2(168, int, InflateReset2, z_streamp, s, a0, int, windowBits, d0, , ZBase);
+    BASE_OR( Z_STREAM_ERROR )
+    return (int) Z_A0A1( -186, strm, head );
 }
 
-int compress(Bytef *dest, uLongf *destLen, const Bytef *source, uLong sourceLen)
+uLong zlibCompileFlags( void )
 {
-    if (!ZOpen())
-        return Z_NOLIB;
-    return LP4(198, int, Compress, Bytef *, dest, a0, uLongf *, destLen, a1, const Bytef *, source, a2,
-               uLong, sourceLen, d0, , ZBase);
+    OWN_OR( 0 )
+    return (uLong) Z_NONE( -288 );
 }
 
-int compress2(Bytef *dest, uLongf *destLen, const Bytef *source, uLong sourceLen, int level)
+int compress( Bytef* dest, uLongf* destLen, const Bytef* source, uLong sourceLen )
 {
-    if (!ZOpen())
-        return Z_NOLIB;
-    return LP5(204, int, Compress2, Bytef *, dest, a0, uLongf *, destLen, a1, const Bytef *, source, a2,
-               uLong, sourceLen, d0, int, level, d1, , ZBase);
+    BASE_OR( Z_MEM_ERROR )
+    return (int) Z_A0A1A2D0( -120, dest, destLen, source, sourceLen );
 }
 
-uLong compressBound(uLong sourceLen)
+int compress2( Bytef* dest, uLongf* destLen, const Bytef* source, uLong sourceLen, int level )
 {
-    if (!ZOpen())
-        return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) + (sourceLen >> 25) + 13;
-    return LP1(210, uLong, CompressBound, uLong, sourceLen, d0, , ZBase);
+    BASE_OR( Z_MEM_ERROR )
+    return (int) Z_A0A1A2D0D1( -222, dest, destLen, source, sourceLen, level );
 }
 
-int uncompress(Bytef *dest, uLongf *destLen, const Bytef *source, uLong sourceLen)
+uLong compressBound( uLong sourceLen )
 {
-    if (!ZOpen())
-        return Z_NOLIB;
-    return LP4(216, int, Uncompress, Bytef *, dest, a0, uLongf *, destLen, a1, const Bytef *, source, a2,
-               uLong, sourceLen, d0, , ZBase);
+    struct Library* base = z_base();
+
+    if( !base )
+        return sourceLen + ( sourceLen >> 12 ) + ( sourceLen >> 14 ) + ( sourceLen >> 25 ) + 13;
+
+    return (uLong) Z_D0( -228, sourceLen );
 }
 
-uLong adler32(uLong adler, const Bytef *buf, uInt len)
+int uncompress( Bytef* dest, uLongf* destLen, const Bytef* source, uLong sourceLen )
 {
-    if (!ZOpen())
+    BASE_OR( Z_MEM_ERROR )
+    return (int) Z_A0A1A2D0( -126, dest, destLen, source, sourceLen );
+}
+
+int uncompress2( Bytef* dest, uLongf* destLen, const Bytef* source, uLong* sourceLen )
+{
+    BASE_OR( Z_MEM_ERROR )
+    return (int) Z_A0A1A2A3( -246, dest, destLen, source, sourceLen );
+}
+
+/* the checksums: z.library's, or computed here without it */
+static uLong adler_here( uLong adler, const Bytef* buf, z_size_t len )
+{
+    uLong a = adler & 0xffff, b = ( adler >> 16 ) & 0xffff;
+
+    while( len )
+    {
+        z_size_t n = len < 5552 ? len : 5552;
+        len -= n;
+
+        while( n-- )
+        {
+            a += *buf++;
+            b += a;
+        }
+
+        a %= 65521;
+        b %= 65521;
+    }
+
+    return ( b << 16 ) | a;
+}
+
+static uLong crc_here( uLong crc, const Bytef* buf, z_size_t len )
+{
+    crc = ~crc & 0xffffffffUL;
+
+    while( len-- )
+    {
+        crc ^= *buf++;
+
+        for( int k = 0; k < 8; k++ )
+            crc = ( crc >> 1 ) ^ ( 0xEDB88320UL & ( 0UL - ( crc & 1 ) ) );
+    }
+
+    return ~crc & 0xffffffffUL;
+}
+
+uLong adler32_z( uLong adler, const Bytef* buf, z_size_t len )
+{
+    struct Library* base = z_base();
+
+    if( !buf )
+        return 1;
+
+    if( !base )
+        return adler_here( adler, buf, len );
+
+    while( len > 0x40000000UL )
+    {
+        adler = (uLong) Z_D0A0D1( -132, adler, buf, 0x40000000UL );
+        buf += 0x40000000UL;
+        len -= 0x40000000UL;
+    }
+
+    return (uLong) Z_D0A0D1( -132, adler, buf, len );
+}
+
+uLong adler32( uLong adler, const Bytef* buf, uInt len )
+{
+    return adler32_z( adler, buf, len );
+}
+
+uLong crc32_z( uLong crc, const Bytef* buf, z_size_t len )
+{
+    struct Library* base = z_base();
+
+    if( !buf )
         return 0;
-    return LP3(228, uLong, Adler32, uLong, adler, d0, const Bytef *, buf, a0, uInt, len, d1, , ZBase);
+
+    if( !base )
+        return crc_here( crc, buf, len );
+
+    while( len > 0x40000000UL )
+    {
+        crc = (uLong) Z_D0A0D1( -138, crc, buf, 0x40000000UL );
+        buf += 0x40000000UL;
+        len -= 0x40000000UL;
+    }
+
+    return (uLong) Z_D0A0D1( -138, crc, buf, len );
 }
 
-uLong crc32(uLong crc, const Bytef *buf, uInt len)
+uLong crc32( uLong crc, const Bytef* buf, uInt len )
 {
-    if (!ZOpen())
-        return 0;
-    return LP3(234, uLong, Crc32, uLong, crc, d0, const Bytef *, buf, a0, uInt, len, d1, , ZBase);
+    return crc32_z( crc, buf, len );
 }
 
-uLong adler32_z(uLong adler, const Bytef *buf, z_size_t len)
+uLong adler32_combine( uLong adler1, uLong adler2, z_off_t len2 )
 {
-    return adler32(adler, buf, (uInt)len);
+    BASE_OR( 0xffffffffUL )
+    return (uLong) Z_D0D1D2( -210, adler1, adler2, len2 );
 }
 
-uLong crc32_z(uLong crc, const Bytef *buf, z_size_t len)
+uLong crc32_combine( uLong crc1, uLong crc2, z_off_t len2 )
 {
-    return crc32(crc, buf, (uInt)len);
+    BASE_OR( 0 )
+    return (uLong) Z_D0D1D2( -216, crc1, crc2, len2 );
 }
 
-uLong adler32_combine(uLong a1, uLong a2, z_off_t len2)
+int deflateGetDictionary( z_streamp strm, Bytef* dictionary, uInt* dictLength )
 {
-    if (!ZOpen())
-        return 0;
-    return LP3(240, uLong, Adler32Combine, uLong, a1, d0, uLong, a2, d1, long, len2, d2, , ZBase);
+    OWN_OR( Z_STREAM_ERROR )
+    return (int) Z_A0A1A2( -294, strm, dictionary, dictLength );
 }
 
-uLong crc32_combine(uLong c1, uLong c2, z_off_t len2)
+const char* zError( int err )
 {
-    if (!ZOpen())
-        return 0;
-    return LP3(246, uLong, Crc32Combine, uLong, c1, d0, uLong, c2, d1, long, len2, d2, , ZBase);
-}
-
-const char *zError(int err)
-{
-    static const char *const msgs[] = {
-        "need dictionary", "stream end", "", "file error", "stream error",
-        "data error", "insufficient memory", "buffer error", "incompatible version"
-    };
-    const int i = 2 - err;
-    return i >= 0 && i < (int)(sizeof msgs / sizeof msgs[0]) ? msgs[i] : "";
+    switch( err )
+    {
+    case Z_NEED_DICT:     return "need dictionary";
+    case Z_STREAM_END:    return "stream end";
+    case Z_OK:            return "";
+    case Z_ERRNO:         return "file error";
+    case Z_STREAM_ERROR:  return "stream error";
+    case Z_DATA_ERROR:    return "data error";
+    case Z_MEM_ERROR:     return "insufficient memory";
+    case Z_BUF_ERROR:     return "buffer error";
+    case Z_VERSION_ERROR: return "incompatible version";
+    default:              return "";
+    }
 }
