@@ -100,8 +100,11 @@ fi
 # names wx's code was compiled with)
 # shellcheck disable=SC2086
 m68k-amigaos-gcc $FLAGS -Wall -I"$SRC/src/zlib" $INC -c "$HERE/src/amiga/wxzlib_zlibrary.c" -o "$B/wxzlib_zlibrary.o"
+# and zlib's gz* file calls, which z.library doesn't have (Golly's patterns)
+# shellcheck disable=SC2086
+m68k-amigaos-gcc $FLAGS -Wall -I"$SRC/src/zlib" $INC -c "$HERE/src/amiga/wxzlib_gzfile.c" -o "$B/wxzlib_gzfile.o"
 ZLIB=$(ls "$B"/lib/libwxzlib-*.a)
-rm -f "$ZLIB"; m68k-amigaos-ar rcs "$ZLIB" "$B/wxzlib_zlibrary.o"
+rm -f "$ZLIB"; m68k-amigaos-ar rcs "$ZLIB" "$B/wxzlib_zlibrary.o" "$B/wxzlib_gzfile.o"
 
 # wxRegEx is regex.library's: libwxregexu holds its link stub, not PCRE
 # shellcheck disable=SC2086

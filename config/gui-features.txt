@@ -54,3 +54,7 @@ STC BITMAPCOMBOBOX TIMEPICKCTRL NANOSVG TREELISTCTRL
 # for wxMaxima: the log window, notifications (wx's generic ones), splines
 # (its brackets) and the SVG file DC
 LOGWINDOW NOTIFICATION_MESSAGE SPLINES SVG
+# wxGLCanvas: its own library (libwx_openlayoutu_gl, wx-config --libs gl),
+# on GFOpenGPU's GL through libGL.a; built when the stove has the GFOpenGPU
+# developer kit (scripts/build-gui.sh)
+GLCANVAS

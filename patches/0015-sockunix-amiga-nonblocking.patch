@@ -1,0 +1,34 @@
+wxWidgets 3.2.12 sockets on AmigaOS: wx made a socket non-blocking with
+ioctl(FIONBIO), which on libnix with the FIONBIO wx's header gives did not
+reach the stack: the socket stayed blocking, so a datagram RecvFrom with
+wxSOCKET_NOWAIT or a timeout never returned (OpenCPN's UDP readers). Ask
+bsdsocket.library itself, through libwxamiga's wxAmigaSocketNonBlocking.
+
+--- a/include/wx/unix/private/sockunix.h
++++ b/include/wx/unix/private/sockunix.h
+@@ -23,6 +23,13 @@
+ 
+ #include "wx/private/fdiomanager.h"
+ 
++#ifdef __AMIGA__
++// libnix's ioctl() with the FIONBIO wx sees here doesn't reach the stack: the
++// socket stayed blocking and a read with wxSOCKET_NOWAIT or a timeout never
++// returned. This one (libwxamiga) asks bsdsocket.library itself.
++extern "C" int wxAmigaSocketNonBlocking(int fd, int on);
++#endif
++
+ #define wxCloseSocket close
+ 
+ class wxSocketImplUnix : public wxSocketImpl,
+@@ -63,7 +70,11 @@
+     {
+         // Make this int and not bool to allow passing it to ioctl().
+         int isNonBlocking = (GetSocketFlags() & wxSOCKET_BLOCK) == 0;
++#ifdef __AMIGA__
++        wxAmigaSocketNonBlocking(m_fd, isNonBlocking);
++#else
+         ioctl(m_fd, FIONBIO, &isNonBlocking);
++#endif
+ 
+         DoEnableEvents(wxSOCKET_INPUT_FLAG | wxSOCKET_OUTPUT_FLAG, isNonBlocking);
+     }
