@@ -1,7 +1,7 @@
 # Our own pieces the toolkit builds on, fetched at build time at these commits.
-# GFOpenLayout UI 0.5 (olui_repaint, olui_popup; named font families): gfopenlayout PR #39's branch
+# GFOpenLayout UI 0.5 (olui_repaint, olui_popup; named font families; option separators): gfopenlayout PR #40's branch
 OLUI_REPO=https://github.com/DalsinAI/gfopenlayout
-OLUI_COMMIT=d3ba34a5846fc051d65e9f156395a897225d1208
+OLUI_COMMIT=ca4ab031a4665cb49efcb2be06e9879a5b4e2b38
 # GFOpenGadTools' theme reader (libraries/opengadtools/lib/ogt_theme.c)
 OGT_REPO=https://github.com/DalsinAI/amicradle-guest
 OGT_COMMIT=6b96130682286b0d91707bdc61bbfb60c43113c4
