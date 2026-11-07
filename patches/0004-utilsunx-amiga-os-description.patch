@@ -52,7 +52,7 @@
 +    if ( verMaj ) *verMaj = amigaMajor;
 +    if ( verMin ) *verMin = amigaMinor;
 +    if ( verMicro ) *verMicro = amigaMicro;
-+    return wxOS_UNKNOWN;
++    return wxOS_AMIGAOS;
 +#endif
      // get OS version
      int major = -1, minor = -1, micro = -1;
