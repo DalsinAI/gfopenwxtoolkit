@@ -207,9 +207,27 @@ int main(int argc, char **argv)
     wxIPV4address u2;
     u2.AnyAddress();
     u2.Service(0);
+    printf("     making the NOWAIT datagram socket\n");
     wxDatagramSocket quiet(u2, wxSOCKET_NOWAIT);
     char qb[8];
     wxIPV4address qfrom;
+    {
+        // the stack's view of wx's socket before wx reads it: the same raw
+        // read, with a small address and with one as big as wx's
+        const int fd = (int)quiet.GetSocket();
+        printf("     quiet ok %d fd %d\n", (int)quiet.IsOk(), fd);
+        struct sockaddr_in sa;
+        socklen_t sl = sizeof sa;
+        errno = 0;
+        int rc = (int)recvfrom(fd, qb, sizeof qb, 0, (struct sockaddr *)&sa, &sl);
+        printf("     quiet raw recvfrom rc=%d errno=%d\n", rc, errno);
+        union { struct sockaddr a; char pad[256]; } big;
+        sl = sizeof big;
+        errno = 0;
+        rc = (int)recvfrom(fd, qb, sizeof qb, 0, &big.a, &sl);
+        printf("     quiet raw recvfrom (256-byte address) rc=%d errno=%d\n", rc, errno);
+        printf("     wx RecvFrom NOWAIT next\n");
+    }
     wxLongLong t0 = wxGetLocalTimeMillis();
     quiet.RecvFrom(qfrom, qb, sizeof qb);
     long ms = (long)(wxGetLocalTimeMillis() - t0).GetValue();
