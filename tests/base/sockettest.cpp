@@ -18,6 +18,28 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include <cstdarg>
+
+// each line also goes to RAM:sockettest.log, opened and closed again, so the
+// lab can read how far it got while a call stands still
+static int Say(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vprintf(fmt, ap);
+    va_end(ap);
+    fflush(stdout);
+    if ( FILE *f = fopen("RAM:sockettest.log", "a") )
+    {
+        va_start(ap, fmt);
+        vfprintf(f, fmt, ap);
+        va_end(ap);
+        fclose(f);
+    }
+    return n;
+}
+#define printf Say
+
 static int g_pass = 0, g_total = 0;
 
 static void Check(bool ok, const char *what)
@@ -71,6 +93,7 @@ static void RawChecks()
 
 int main(int argc, char **argv)
 {
+    remove("RAM:sockettest.log");
     wxInitializer init(argc, argv);
     Check(init.IsOk(), "wx initialised");
     Check(wxSocketBase::Initialize(), "wxSocketBase::Initialize (bsdsocket.library open)");
