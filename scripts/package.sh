@@ -1,7 +1,7 @@
 #!/bin/sh
 # The GFOpenWX Toolkit package: openwxtoolkit.library, its wx module, the
 # shared tests, the documents and the Amiga Installer script, as
-# GFOpenWXToolkit-VERSION.lha (and .zip) in DEST.
+# GFOpenWXToolkit-VERSION.lha (and .zip) in DEST, and unpacked in DEST/package.
 #   package.sh BUILD-OUT DEST VERSION
 # Copyright (c) 2026 AmiCradle Team
 set -eu
@@ -23,5 +23,7 @@ rm -f "$D/$N.lha" "$D/$N.zip"
 if command -v lha >/dev/null 2>&1; then (cd "$T" && lha -aq "$D/$N.lha" Install-GFOpenWXToolkit Install-GFOpenWXToolkit.info GFOpenWXToolkit); fi
 (cd "$T" && zip -qr "$D/$N.zip" Install-GFOpenWXToolkit Install-GFOpenWXToolkit.info GFOpenWXToolkit)
 (cd "$D" && sha256sum "$N".* > "$N.sha256")
+# the unpacked package too, for a lab without an LhA (DEST/package/)
+rm -rf "$D/package"; cp -a "$T" "$D/package"
 rm -rf "$T"
 ls -l "$D/$N".*
