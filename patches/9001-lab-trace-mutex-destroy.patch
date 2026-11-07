@@ -7,7 +7,7 @@
 +#ifdef __AMIGA__
 +#include <stdio.h>
 +#include <exec/tasks.h>
-+#include <proto/exec.h>
++#include <clib/exec_protos.h>
 +#endif
  #include "wx/except.h"
  #include "wx/scopeguard.h"
