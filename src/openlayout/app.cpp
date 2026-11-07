@@ -20,6 +20,7 @@
 #include "wx/evtloop.h"
 #include "wx/unix/private/timer.h"
 #include "wx/private/eventloopsourcesmanager.h"
+#include "wx/vector.h"
 
 #include <exec/ports.h>
 #include <exec/io.h>
@@ -130,6 +131,55 @@ static void CloseTimer()
     gs_timerOpen = false;
 }
 
+// ---- other signals --------------------------------------------------------------------
+
+// signals of the program's own the loop waits for too, each with what runs
+// when it comes (an ARexx port's, arexx.cpp)
+struct OLSignalWatch { ULONG mask; void (*fn)(void *); void *data; };
+static wxVector<OLSignalWatch> gs_watches;
+
+void wxOLAddSignalWatch(unsigned long mask, void (*fn)(void *), void *data)
+{
+    if ( mask && fn )
+        gs_watches.push_back(OLSignalWatch{(ULONG)mask, fn, data});
+}
+
+void wxOLRemoveSignalWatch(void *data)
+{
+    for ( size_t i = 0; i < gs_watches.size(); )
+    {
+        if ( gs_watches[i].data == data )
+            gs_watches.erase(gs_watches.begin() + i);
+        else
+            i++;
+    }
+}
+
+static ULONG WatchMask()
+{
+    ULONG m = 0;
+    for ( size_t i = 0; i < gs_watches.size(); i++ )
+        m |= gs_watches[i].mask;
+    return m;
+}
+
+// the handlers of the signals in got; true when any ran
+static bool DispatchWatches(ULONG got)
+{
+    bool ran = false;
+    for ( size_t i = 0; i < gs_watches.size(); i++ )
+    {
+        if ( got & gs_watches[i].mask )
+        {
+            // a handler may take its watch away: copied first
+            const OLSignalWatch w = gs_watches[i];
+            w.fn(w.data);
+            ran = true;
+        }
+    }
+    return ran;
+}
+
 // ---- the messages ----------------------------------------------------------------------
 
 // one message, copied and replied before it is handled: the window it is for
@@ -231,7 +281,7 @@ bool wxGUIEventLoop::Pending() const
 {
     if ( PortHasMessages() || TimerDue() )
         return true;
-    const ULONG wake = wxOLWakeSignal();
+    const ULONG wake = wxOLWakeSignal() | WatchMask();
     return wake && (SetSignal(0, 0) & wake);
 }
 
@@ -247,6 +297,13 @@ bool wxGUIEventLoop::DoDispatch(long timeout)
     const ULONG wake = wxOLWakeSignal();
     if ( wake && (SetSignal(0, wake) & wake) )
         return true;
+    const ULONG watched = WatchMask();
+    if ( watched )
+    {
+        const ULONG got = SetSignal(0, watched) & watched;
+        if ( got && DispatchWatches(got) )
+            return true;
+    }
 
     DrawAll();
     if ( PortHasMessages() )
@@ -272,7 +329,7 @@ bool wxGUIEventLoop::DoDispatch(long timeout)
 #endif
     }
 
-    ULONG mask = wake | SIGBREAKF_CTRL_C;
+    ULONG mask = wake | watched | SIGBREAKF_CTRL_C;
     if ( gs_port )
         mask |= 1UL << gs_port->mp_SigBit;
     if ( wait > 0 && OpenTimer() )
@@ -298,6 +355,8 @@ bool wxGUIEventLoop::DoDispatch(long timeout)
         return true;
     }
     bool handled = (got & wake) != 0;
+    if ( (got & watched) && DispatchWatches(got & watched) )
+        handled = true;
     if ( wxOLDispatchSockets() )
         handled = true;
     if ( HandleOneMessage() )
