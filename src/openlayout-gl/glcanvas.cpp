@@ -37,7 +37,7 @@ struct wxGLTarget
 };
 
 // one display for the program: virgl on AmiCradle's GPU when the host
-// answers, else softpipe on this CPU (SetEnv WXGL_CPU 1: softpipe always)
+// answers, else softpipe on this CPU
 static struct gla_display *gs_display = NULL;
 // what is current, so a canvas or context going away lets go of it first
 static struct gla_context *gs_curContext = NULL;
@@ -47,13 +47,9 @@ static struct gla_display *GetDisplay()
 {
     if ( gs_display )
         return gs_display;
-    const char *cpu = getenv("WXGL_CPU");
-    if ( !cpu || !*cpu || *cpu == '0' )
-    {
-        struct gla_virgl_transport t;
-        if ( gla_os3_virgl_transport(&t) )
-            gs_display = gla_display_create_virgl(&t);
-    }
+    struct gla_virgl_transport t;
+    if ( gla_os3_virgl_transport(&t) )
+        gs_display = gla_display_create_virgl(&t);
     if ( !gs_display )
         gs_display = gla_display_create();
     return gs_display;
