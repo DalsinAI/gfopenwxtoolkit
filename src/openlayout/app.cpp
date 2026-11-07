@@ -31,6 +31,7 @@
 #include <clib/alib_protos.h>
 
 #include "private.h"
+#include <stdlib.h>
 
 void wxOLFreeMasterUI();
 void wxOLCloseKeymap();
@@ -180,6 +181,16 @@ static bool DispatchWatches(ULONG got)
     return ran;
 }
 
+// ---- the trace ------------------------------------------------------------------------
+
+bool wxOLTracing()
+{
+    static int on = -1;
+    if ( on < 0 )
+        on = getenv("WXOL_TRACE") != NULL;
+    return on != 0;
+}
+
 // ---- the messages ----------------------------------------------------------------------
 
 // one message, copied and replied before it is handled: the window it is for
@@ -241,10 +252,16 @@ static bool HandleOneMessage()
         wxNonOwnedWindow *w = wxOLOpenWindow(i);
         if ( w->OLGetWindow() == win )
         {
+            if ( copy.Class != IDCMP_MOUSEMOVE && copy.Class != IDCMP_INTUITICKS )
+                wxOL_TRACE("message %08lx code %04x qual %04x to '%s' (enabled %d)", (unsigned long)copy.Class,
+                           (unsigned)copy.Code, (unsigned)copy.Qualifier, (const char *)w->OLGetTitle().mb_str(),
+                           (int)w->IsEnabled());
             w->OLHandleMessage(&copy);
             break;
         }
     }
+    if ( i == wxOLOpenWindowCount() )
+        wxOL_TRACE("message %08lx code %04x for a window wx doesn't have", (unsigned long)copy.Class, (unsigned)copy.Code);
     return true;
 }
 

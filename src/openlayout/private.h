@@ -19,6 +19,7 @@ struct IntuitionBase;
 extern "C" struct GfxBase *GfxBase;
 extern "C" struct IntuitionBase *IntuitionBase;
 #include <string>
+#include <stdio.h>
 
 extern "C" {
 #include "gfopenlayout_ui.h"
@@ -82,6 +83,11 @@ void wxOLTextExtent(struct TextFont *tf, unsigned style, const wxString& s, int 
 // GetCharWidth: the font's average letter advance (tf_XSize is the widest
 // glyph's box, half as wide again as the letters in a scaled or outline font)
 int wxOLCharWidth(struct TextFont *tf, unsigned style);
+
+// ENV:WXOL_TRACE set (to anything): the event loop says on stderr what it
+// gets and gives (Intuition's messages, olui's events, modal loops)
+bool wxOLTracing();
+#define wxOL_TRACE(...) do { if ( wxOLTracing() ) { fprintf(stderr, "wxol: " __VA_ARGS__); fputc('\n', stderr); fflush(stderr); } } while (0)
 
 // the qualifiers of the last input event a window had (the event loop sets them)
 extern unsigned short wxOLLastQualifier;
