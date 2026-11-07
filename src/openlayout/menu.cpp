@@ -601,7 +601,7 @@ void PopupItems(wxMenu *menu, std::vector<wxMenuItem *>& items, wxString& m)
         wxMenuItem *item = n->GetData();
         if ( item->IsSeparator() )
         {
-            m += "<option disabled>----------</option>";
+            m += "<option separator></option>";
             continue;
         }
         wxString label = item->GetItemLabelText();
