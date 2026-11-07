@@ -220,8 +220,14 @@ bool wxPNGHandler::SaveFile(wxImage *image, wxOutputStream& stream, bool verbose
         p[3] = rgb[2];
     }
     bool ok = false;
+    // an empty object, just to encode with (picture.datatype makes one only
+    // in V43 mode)
     Object *o = NewDTObject((APTR)NULL, DTA_SourceType, DTST_RAM, DTA_BaseName, (ULONG)"gfopenpng",
-                            DTA_GroupID, GID_PICTURE, TAG_DONE);
+                            DTA_GroupID, GID_PICTURE, PDTA_DestMode, PMODE_V43, TAG_DONE);
+    LONG why = 0;
+    const char *stage = "no gfopenpng object";
+    if ( !o )
+        why = IoErr();
     if ( o )
     {
         struct wxOLEncodePNG m;
@@ -239,12 +245,18 @@ bool wxPNGHandler::SaveFile(wxImage *image, wxOutputStream& stream, bool verbose
             stream.Write(m.oiep_Data, m.oiep_Size);
             ok = stream.LastWrite() == m.oiep_Size;
             FreeVec(m.oiep_Data);
+            stage = "the stream took less";
+        }
+        else
+        {
+            stage = "the encoder failed";
+            why = m.oiep_Error;
         }
         DisposeDTObject(o);
     }
     FreeVec(argb);
     if ( !ok && verbose )
-        wxLogError(_("gfopenpng.datatype could not write the PNG image."));
+        wxLogError(_("gfopenpng.datatype could not write the PNG image (%s, error %ld)."), stage, (long)why);
     return ok;
 }
 
