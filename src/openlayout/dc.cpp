@@ -1286,6 +1286,11 @@ void wxMemoryDCImpl::DoSelect(const wxBitmap& bitmap)
     if ( !l )
         return;
     l->li = NewLayerInfo();
+    // and none behind the layer either: DeleteLayer() fills what it uncovers
+    // with the LayerInfo's backfill (pen 0, the screen's grey), so everything
+    // drawn was lost when the bitmap was deselected
+    if ( l->li )
+        InstallLayerInfoHook(l->li, LAYERS_NOBACKFILL);
     if ( l->li )
         // no backfill: a new layer would clear the bitmap's pixels to pen 0
         l->layer = CreateUpfrontHookLayer(l->li, bm, 0, 0, m_bmp.GetWidth() - 1, m_bmp.GetHeight() - 1, LAYERSIMPLE,
