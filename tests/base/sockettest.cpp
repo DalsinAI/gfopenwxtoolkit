@@ -124,19 +124,18 @@ int main(int argc, char **argv)
         close(raw);
     }
     {
-        // wx's own datagram socket, FIONBIO given once more here
+        // wx's own datagram socket, as wx made it
         wxIPV4address a0;
         a0.AnyAddress();
         a0.Service(0);
         wxDatagramSocket w0(a0, wxSOCKET_NOWAIT);
         const int fd = (int)w0.GetSocket();
-        int one = 1;
-        int irc = ioctl(fd, FIONBIO, &one);
-        printf("     wx datagram fd %d, our FIONBIO rc=%d: reading\n", fd, irc);
+        printf("     FIONBIO here is 0x%lx; wx datagram fd %d as wx left it: reading\n", (unsigned long)FIONBIO, fd);
         char rb[8];
         errno = 0;
         int rc = (int)recvfrom(fd, rb, sizeof rb, 0, NULL, NULL);
-        printf("     wx datagram fd %d after our FIONBIO: rc=%d errno=%d\n", fd, rc, errno);
+        Check(rc == -1 && (errno == EAGAIN || errno == EWOULDBLOCK), "wx's datagram socket is non-blocking");
+        printf("     wx datagram fd %d: rc=%d errno=%d\n", fd, rc, errno);
     }
 
     wxIPV4address any;
