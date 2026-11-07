@@ -146,7 +146,10 @@ wxSize wxAnyButton::DoGetBestSize() const
         s.x += b.x + (s.x ? 4 : 0);
         s.y = wxMax(s.y, b.y);
     }
-    s.x += 16;
+    // olui's button has 10 pixels of padding and a 1 pixel border on each
+    // side (ui/olui.c), and 4 more as olui measures in its own font, which
+    // can be wider; with 16 a longer label wrapped a word to a second line
+    s.x += 26;
     s.y += 8;
     if ( !(GetWindowStyleFlag() & wxBU_EXACTFIT) && !GetLabelText().empty() )
         s.x = wxMax(s.x, 60);
