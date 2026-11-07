@@ -27,11 +27,13 @@
 #include <exec/memory.h>
 #include <dos/dos.h>
 #include <intuition/classusr.h>
+#include <intuition/classes.h>
 #include <datatypes/datatypes.h>
 #include <datatypes/datatypesclass.h>
 #include <datatypes/pictureclass.h>
 #include <clib/exec_protos.h>
 #include <clib/dos_protos.h>
+#include <inline/macros.h>
 #include <clib/alib_protos.h>
 
 // datatypes.library, opened while a picture is read or written
@@ -58,6 +60,8 @@ struct wxOLEncodePNG
     LONG oiep_Error;
 };
 #define wxOL_OIEF_OPAQUE 2UL
+// a datatype class library's first call: its Class
+#define wxOL_DT_OBTAINENGINE(base) LP0(0x1e, Class *, ObtainEngine, , (base))
 
 namespace
 {
@@ -240,7 +244,19 @@ bool wxPNGHandler::SaveFile(wxImage *image, wxOutputStream& stream, bool verbose
         m.oiep_Flags = (a || mask) ? 0 : wxOL_OIEF_OPAQUE;
         m.oiep_Level = image->HasOption(wxIMAGE_OPTION_PNG_COMPRESSION_LEVEL)
                        ? image->GetOptionInt(wxIMAGE_OPTION_PNG_COMPRESSION_LEVEL) : -1;
-        if ( DoMethodA(o, (Msg)&m) && m.oiep_Data )
+        // datatypes.library 47 (OS 3.2) gives the empty object picture.datatype's
+        // class, not gfopenpng's: the method then goes to gfopenpng's class
+        // itself, which encodes the pixels given without the object's own
+        struct Library *png = OpenLibrary((CONST_STRPTR)"datatypes/gfopenpng.datatype", 47);
+        Class *cl = png ? wxOL_DT_OBTAINENGINE(png) : NULL;
+        ULONG done;
+        if ( cl && OCLASS(o) != cl )
+            done = CoerceMethodA(cl, o, (Msg)&m);
+        else
+            done = DoMethodA(o, (Msg)&m);
+        if ( png )
+            CloseLibrary(png);
+        if ( done && m.oiep_Data )
         {
             stream.Write(m.oiep_Data, m.oiep_Size);
             ok = stream.LastWrite() == m.oiep_Size;
