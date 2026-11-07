@@ -9,6 +9,10 @@
  *   one waits with bsdsocket.library's WaitSelect on the stack's own
  *   descriptors. Descriptors that are not sockets (files, the console)
  *   count as ready, as a file is to select() on Unix.
+ * - wxAmigaSocketNonBlocking: a socket made non-blocking (or blocking) by
+ *   bsdsocket.library's IoctlSocket on the stack's own descriptor. wx's
+ *   ioctl(FIONBIO) through libnix left a datagram socket blocking, so
+ *   reads with wxSOCKET_NOWAIT or a timeout never came back (7 Nov 2026).
  * - wxAmigaExePath: the running program's full path (its drawer from
  *   GetProgramDir, its name from GetProgramName), for wxStandardPaths'
  *   GetExecutablePath, where Linux reads /proc/self/exe.
@@ -50,6 +54,20 @@ static int stack_socket(int fd)
     if (!sfd || !(sfd->lx_flags & LX_SOCKET))
         return -1;
     return sfd->lx_sock;
+}
+
+/* FIONBIO as bsdsocket.library takes it: _IOW('f', 126, long) */
+#define WXAMIGA_FIONBIO 0x8004667EUL
+
+int wxAmigaSocketNonBlocking(int fd, int on)
+{
+    LONG v = on ? 1 : 0;
+    int s = stack_socket(fd);
+    if (s < 0 || !SocketBase) {
+        errno = EBADF;
+        return -1;
+    }
+    return IoctlSocket(s, WXAMIGA_FIONBIO, (char *)&v) == 0 ? 0 : -1;
 }
 
 __stdargs int select(int n, fd_set *r, fd_set *w, fd_set *e, struct timeval *t)

@@ -35,6 +35,8 @@ public:
     virtual bool OLIsNative() const wxOVERRIDE { return true; }
 
 protected:
+    // the label on one line, with olui's room for the box at its start
+    virtual wxSize DoGetBestSize() const wxOVERRIDE;
     virtual void DoSet3StateValue(wxCheckBoxState state) wxOVERRIDE;
     virtual wxCheckBoxState DoGet3StateValue() const wxOVERRIDE { return m_olState; }
 
