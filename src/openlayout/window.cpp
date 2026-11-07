@@ -119,7 +119,23 @@ void wxWindowOpenLayout::OLMakeElement()
         return;     // the parent has no element yet
     if ( (!OLIsNative() || OLWantsImage()) && !OLOwnDrawn() && !m_olImage )
         m_olImage = m_olTLW->OLAllocImage((wxWindow *)this);
-    const std::string markup = wxOLToUTF8(OLGetMarkup());
+    const wxString ml = OLGetMarkup();
+    // the outer tag's own style (text-align, display:flex, padding...),
+    // kept for OLPlace(), which replaces the attribute with its placement
+    m_olMarkupStyle.clear();
+    const wxString tag = ml.BeforeFirst('>');
+    for ( const char *q : { " style='", " style=\"" } )
+    {
+        const int at = tag.Find(q);
+        if ( at == wxNOT_FOUND )
+            continue;
+        const wxString rest = tag.Mid(at + 8);
+        const int end = rest.Find(q[7]);
+        if ( end != wxNOT_FOUND )
+            m_olMarkupStyle = rest.Left(end);
+        break;
+    }
+    const std::string markup = wxOLToUTF8(ml);
     char err[128];
     m_olEl = olui_add(ui, container, markup.c_str(), err, sizeof err);
     if ( !m_olEl )
@@ -193,6 +209,9 @@ void wxWindowOpenLayout::OLPlace()
     wxString decls = wxString::Format("position:absolute;left:0;top:0;width:%dpx;height:%dpx;margin:0;"
                                       "box-sizing:border-box",
                                       wxMax(m_rect.width, 0), wxMax(m_rect.height, 0));
+    // the markup's own declarations first: the placement's win over them
+    if ( !m_olMarkupStyle.empty() )
+        decls = m_olMarkupStyle + ";" + decls;
     if ( OLOwnDrawn() )
     {
         // a plain box (olui notes where a box with a background is drawn,
