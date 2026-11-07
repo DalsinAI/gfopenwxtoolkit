@@ -1,0 +1,104 @@
+--- a/src/generic/dirctrlg.cpp
++++ b/src/generic/dirctrlg.cpp
+@@ -55,6 +55,11 @@
+ #include "wx/volume.h"
+ #endif
+ 
++#ifdef __AMIGA__
++// the mounted volumes and the assigns, each "Name:", sorted
++void wxAmigaGetVolumes(wxArrayString& volumes, wxArrayString& assigns);
++#endif
++
+ #ifdef __WINDOWS__
+ #include <windows.h>
+ #include "wx/msw/winundef.h"
+@@ -152,6 +157,24 @@
+     }
+ #endif // __WIN32__/!__WIN32__
+ 
++#elif defined(__AMIGA__)
++    // AmigaOS: no "/" root; the mounted volumes, then the assigns, each a
++    // root of its own ("Work:", "SYS:"), as the ASL requester lists them
++    // (the DOS list is read in the port's src/openlayout/misc.cpp)
++    wxArrayString volumes, assigns;
++    wxAmigaGetVolumes(volumes, assigns);
++    for ( size_t i = 0; i < volumes.size(); i++ )
++    {
++        paths.Add(volumes[i]);
++        names.Add(volumes[i]);
++        icon_ids.Add(wxFileIconsTable::drive);
++    }
++    for ( size_t i = 0; i < assigns.size(); i++ )
++    {
++        paths.Add(assigns[i]);
++        names.Add(assigns[i]);
++        icon_ids.Add(wxFileIconsTable::folder);
++    }
+ #elif defined(__UNIX__)
+     paths.Add(wxT("/"));
+     names.Add(wxT("/"));
+@@ -323,7 +346,7 @@
+     {
+         ExpandPath(m_defaultPath);
+     }
+-#ifdef __UNIX__
++#if defined(__UNIX__) && !defined(__AMIGA__)
+     else
+     {
+         // On Unix, there's only one node under the (hidden) root node. It
+@@ -755,7 +778,11 @@
+     {
+         eachFilename = dirs[i];
+         path = dirName;
+-        if (!wxEndsWithPathSeparator(path))
++        if (!wxEndsWithPathSeparator(path)
++#ifdef __AMIGA__
++            && path.Last() != wxT(':')
++#endif
++           )
+             path += wxString(wxFILE_SEP_PATH);
+         path += eachFilename;
+ 
+@@ -780,7 +807,11 @@
+         {
+             eachFilename = filenames[i];
+             path = dirName;
+-            if (!wxEndsWithPathSeparator(path))
++            if (!wxEndsWithPathSeparator(path)
++#ifdef __AMIGA__
++                && path.Last() != wxT(':')
++#endif
++               )
+                 path += wxString(wxFILE_SEP_PATH);
+             path += eachFilename;
+             //path = dirName + wxString(wxT("/")) + eachFilename;
+@@ -830,8 +861,8 @@
+     // Append a separator to foil bogus substring matching
+     path2 += wxString(wxFILE_SEP_PATH);
+ 
+-    // In MSW case is not significant
+-#if defined(__WINDOWS__)
++    // In MSW case is not significant (nor in AmigaOS's names)
++#if defined(__WINDOWS__) || defined(__AMIGA__)
+     path2.MakeLower();
+ #endif
+ 
+@@ -844,11 +875,15 @@
+         if (data && !data->m_path.empty())
+         {
+             wxString childPath(data->m_path);
+-            if (!wxEndsWithPathSeparator(childPath))
++            if (!wxEndsWithPathSeparator(childPath)
++#ifdef __AMIGA__
++                && childPath.Last() != wxT(':')     // a volume's own root
++#endif
++               )
+                 childPath += wxString(wxFILE_SEP_PATH);
+ 
+-            // In MSW case is not significant
+-#if defined(__WINDOWS__)
++            // In MSW case is not significant (nor in AmigaOS's names)
++#if defined(__WINDOWS__) || defined(__AMIGA__)
+             childPath.MakeLower();
+ #endif
+ 

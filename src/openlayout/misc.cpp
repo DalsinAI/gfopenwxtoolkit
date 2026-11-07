@@ -33,6 +33,8 @@
 #include <clib/intuition_protos.h>
 #include <clib/graphics_protos.h>
 #include <clib/diskfont_protos.h>
+#include <dos/dosextens.h>
+#include <clib/dos_protos.h>
 
 #include <errno.h>
 #include <string.h>
@@ -556,4 +558,28 @@ bool wxLaunchDefaultApplication(const wxString& document, int WXUNUSED(flags))
     WorkbenchBase = NULL;
     CloseLibrary(base);
     return ok != FALSE;
+}
+
+// ----------------------------------------------------------------------------
+// wxAmigaGetVolumes: the mounted volumes and the assigns, each "Name:" and
+// sorted, for wxGenericDirCtrl's roots (patches/0016): AmigaOS has no "/"
+// ----------------------------------------------------------------------------
+
+static void wxAmigaDosNames(ULONG kind, wxArrayString& out)
+{
+    struct DosList *dl = LockDosList(kind | LDF_READ);
+    while ( (dl = NextDosEntry(dl, kind)) != NULL )
+    {
+        const UBYTE *b = (const UBYTE *)BADDR(dl->dol_Name);
+        if ( b && b[0] )
+            out.Add(wxString((const char *)b + 1, (size_t)b[0]) + wxT(":"));
+    }
+    UnLockDosList(kind | LDF_READ);
+    out.Sort();
+}
+
+void wxAmigaGetVolumes(wxArrayString& volumes, wxArrayString& assigns)
+{
+    wxAmigaDosNames(LDF_VOLUMES, volumes);
+    wxAmigaDosNames(LDF_ASSIGNS, assigns);
 }
