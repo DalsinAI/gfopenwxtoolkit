@@ -81,8 +81,7 @@ public:
             gla_display_destroy(gs_display);
             gs_display = NULL;
         }
-        gla_os3_present_close();
-        gla_os3_virgl_close();
+        // (what presenting opened, GL.module closes with the program)
     }
 
 private:
