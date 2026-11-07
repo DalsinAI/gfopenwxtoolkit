@@ -99,6 +99,46 @@ int main(int argc, char **argv)
     Check(wxSocketBase::Initialize(), "wxSocketBase::Initialize (bsdsocket.library open)");
     RawChecks();
 
+    // empty non-blocking datagram reads on raw sockets: bound to loopback or
+    // to any address, FIONBIO before or after bind (wx sets it before);
+    // a read that stands still shows here as the last line
+    for ( int v = 0; v < 4; v++ )
+    {
+        const bool any = v & 2, before = v & 1;
+        int raw = socket(AF_INET, SOCK_DGRAM, 0);
+        struct sockaddr_in ra;
+        memset(&ra, 0, sizeof ra);
+        ra.sin_family = AF_INET;
+        ra.sin_addr.s_addr = htonl(any ? INADDR_ANY : INADDR_LOOPBACK);
+        int one = 1;
+        if ( before )
+            ioctl(raw, FIONBIO, &one);
+        bind(raw, (struct sockaddr *)&ra, sizeof ra);
+        if ( !before )
+            ioctl(raw, FIONBIO, &one);
+        printf("     raw %s, FIONBIO %s bind: fd %d reading\n", any ? "any" : "loopback", before ? "before" : "after", raw);
+        char rb[8];
+        errno = 0;
+        int rc = (int)recvfrom(raw, rb, sizeof rb, 0, NULL, NULL);
+        printf("     raw %s, FIONBIO %s bind: rc=%d errno=%d\n", any ? "any" : "loopback", before ? "before" : "after", rc, errno);
+        close(raw);
+    }
+    {
+        // wx's own datagram socket, FIONBIO given once more here
+        wxIPV4address a0;
+        a0.AnyAddress();
+        a0.Service(0);
+        wxDatagramSocket w0(a0, wxSOCKET_NOWAIT);
+        const int fd = (int)w0.GetSocket();
+        int one = 1;
+        int irc = ioctl(fd, FIONBIO, &one);
+        printf("     wx datagram fd %d, our FIONBIO rc=%d: reading\n", fd, irc);
+        char rb[8];
+        errno = 0;
+        int rc = (int)recvfrom(fd, rb, sizeof rb, 0, NULL, NULL);
+        printf("     wx datagram fd %d after our FIONBIO: rc=%d errno=%d\n", fd, rc, errno);
+    }
+
     wxIPV4address any;
     Check(any.Hostname("127.0.0.1"), "address 127.0.0.1");
     wxIPV4address local;
@@ -242,29 +282,6 @@ int main(int argc, char **argv)
     printf("     timeout RecvFrom: %ld ms, count %u, error %d\n", ms, (unsigned)quiet.LastCount(), (int)quiet.LastError());
     fflush(stdout);
     Check(ms >= 1500 && ms < 5000 && quiet.LastError() == wxSOCKET_TIMEDOUT, "datagram: read gives up after its timeout");
-
-    // which order the stack keeps FIONBIO in: bind then FIONBIO, and FIONBIO
-    // then bind (wx's order); a read that stands still shows here last
-    for ( int order = 0; order < 2; order++ )
-    {
-        int raw = socket(AF_INET, SOCK_DGRAM, 0);
-        struct sockaddr_in ra;
-        memset(&ra, 0, sizeof ra);
-        ra.sin_family = AF_INET;
-        ra.sin_addr.s_addr = htonl(INADDR_ANY);
-        int one = 1;
-        if ( order == 1 )
-            ioctl(raw, FIONBIO, &one);
-        bind(raw, (struct sockaddr *)&ra, sizeof ra);
-        if ( order == 0 )
-            ioctl(raw, FIONBIO, &one);
-        printf("     raw %s: reading\n", order ? "FIONBIO then bind" : "bind then FIONBIO");
-        char rb[8];
-        errno = 0;
-        int rc = (int)recvfrom(raw, rb, sizeof rb, 0, NULL, NULL);
-        printf("     raw %s: rc=%d errno=%d\n", order ? "FIONBIO then bind" : "bind then FIONBIO", rc, errno);
-        close(raw);
-    }
 
     wxSocketBase::Shutdown();
     printf("sockettest: %d of %d passed\n", g_pass, g_total);
