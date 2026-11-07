@@ -26,6 +26,7 @@ gui=0
 base=0
 xml=0
 net=0
+gl=0
 out=""
 status=0
 
@@ -57,6 +58,7 @@ for arg in "$@"; do
                     xml) xml=1; base=1 ;;
                     net) net=1; base=1 ;;
                     std|all) base=1; gui=1; xml=1; net=1 ;;
+                    gl) gl=1; gui=1 ;;
                     *) gui=1 ;;
                 esac
             done
@@ -88,12 +90,17 @@ if [ "$want_libs" = 1 ]; then
     libs="-L$L -Wl,--start-group"
     # (the GUI library holds xrc and richtext, which read XML)
     [ "$gui" = 1 ] && xml=1
+    # wxGLCanvas: wx's GL library, and GL itself (the GFOpenGPU developer
+    # kit's libGL.a: the stove's, or -L to a kit)
+    [ "$gl" = 1 ] && libs="$libs $L/libwx_openlayoutu_gl-$release.a"
     if [ "$gui" = 1 ]; then
         libs="$libs $L/libwx_openlayoutu_core-$release.a $L/libgfopenlayout_ui.a $L/libwxscintilla-$release.a"
     fi
     [ "$xml" = 1 ] && libs="$libs $L/libwx_baseu_xml-$release.a"
     [ "$net" = 1 ] && libs="$libs $L/libwx_baseu_net-$release.a"
-    libs="$libs $L/libwx_baseu-$release.a $L/libwxregexu-$release.a $L/libwxzlib-$release.a $L/libwxexpat-$release.a $L/libwxamiga-$release.a -Wl,--end-group -Wl,-lsocket,-lpthread,-latomic,-lm,-lamiga"
+    libs="$libs $L/libwx_baseu-$release.a $L/libwxregexu-$release.a $L/libwxzlib-$release.a $L/libwxexpat-$release.a $L/libwxamiga-$release.a -Wl,--end-group"
+    [ "$gl" = 1 ] && libs="$libs -Wl,-lGL"
+    libs="$libs -Wl,-lsocket,-lpthread,-latomic,-lm,-lamiga"
     out="$out $libs"
 fi
 [ -n "$out" ] && echo $out

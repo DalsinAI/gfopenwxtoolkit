@@ -63,6 +63,11 @@ public:
     int OLAllocImage(wxWindow *win);
     void OLFreeImage(int image);
     wxWindow *OLWindowForImage(int image) const;
+    // a window that draws straight into the Intuition window (wxGLCanvas):
+    // olui copies its buffer around the window's element and asks the
+    // window to draw its box (OLDrawOwn); four at most. false when olui
+    // has no room for another
+    bool OLSetOwn(wxWindow *win, bool own);
 
 protected:
     virtual void DoGetPosition(int *x, int *y) const wxOVERRIDE;
@@ -91,6 +96,8 @@ protected:
     bool m_olCloseLater;
     bool m_olActive;
     wxVector<wxWindow*> m_olImages;   // index: picture number - 1
+    wxVector<wxWindow*> m_olOwn;      // the windows that draw themselves (OLSetOwn)
+    void OLOwnAll();        // gives them to a new olui_amiga
     wxWindow *m_olPressed;  // a button went down in it (drawn by wx): it has the mouse until it goes up
     unsigned long m_olDownSecs, m_olDownMicros;
     int m_olDownX, m_olDownY, m_olDownButton;
