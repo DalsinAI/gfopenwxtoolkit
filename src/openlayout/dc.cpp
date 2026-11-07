@@ -215,7 +215,7 @@ void wxOLDCImpl::OLSetAPen(const wxColour& c)
 // a device box in a colour (cut to the clip by the layer)
 void wxOLDCImpl::OLFill(int x, int y, int w, int h, const wxColour& c)
 {
-    if ( !OLCut(x, y, w, h) )
+    if ( !m_rp || !OLCut(x, y, w, h) )
         return;
     if ( m_olDirect && m_logicalFunction == wxCOPY )
     {
@@ -1178,7 +1178,18 @@ void wxWindowDCImpl::OLInitForWindow(wxWindow *win, bool WXUNUSED(clientOnly))
     wxNonOwnedWindow *tlw = win->OLGetTLW();
     struct Window *w = tlw ? tlw->OLGetWindow() : NULL;
     if ( !w )
+    {
+        // no Intuition window yet (the frame isn't shown): a DC that measures
+        // (fonts, text extents, size) and draws nothing, as wx's generic
+        // controls expect. wxAuiToolBar::Realize gives up on a DC that is not
+        // OK, so KiCad's toolbars, realized before the frame shows, lost
+        // every tool.
+        m_olBox = win->OLGetBoxInTLW();
+        m_w = m_olBox.width;
+        m_h = m_olBox.height;
+        m_ok = true;
         return;
+    }
     m_olBox = win->OLGetBoxInTLW();
     OLInit(w->RPort, w->BorderLeft + m_olBox.x, w->BorderTop + m_olBox.y, m_olBox.width, m_olBox.height);
 }

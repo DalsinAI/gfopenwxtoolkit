@@ -25,7 +25,9 @@ public:
     wxOLDCImpl(wxDC *owner);
     virtual ~wxOLDCImpl();
 
-    virtual bool IsOk() const wxOVERRIDE { return m_rp != NULL; }
+    // a client DC made before the window has its Intuition window still
+    // measures (m_ok, no RastPort), so wxAuiToolBar::Realize lays out
+    virtual bool IsOk() const wxOVERRIDE { return m_rp != NULL || m_ok; }
 
     virtual void Clear() wxOVERRIDE;
     virtual bool StartDoc(const wxString& WXUNUSED(message)) wxOVERRIDE { return true; }
