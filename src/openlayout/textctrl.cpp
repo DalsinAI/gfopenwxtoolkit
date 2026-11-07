@@ -492,8 +492,11 @@ wxString wxComboBox::OLGetMarkup() const
     const wxString dis = IsThisEnabled() ? "" : " disabled";
     if ( HasFlag(wxCB_READONLY) )
         return "<select id=" + OLId() + dis + ">" + opts + "</select>";
+    // the field gives way to the drop-down: olui's input is 160 pixels wide
+    // and does not shrink below that with flex:1 alone, so a narrower combo
+    // box pushed its drop-down out of the box
     return "<div id=" + OLId() + " style='display:flex;gap:2px'><input id=" + OLId() + "t" + dis +
-           " style='flex:1' value=\"" + wxOLEscape(m_olValue) + "\"><select id=" + OLId() + "s" + dis +
+           " style='flex:1 1 0;width:auto;min-width:0' value=\"" + wxOLEscape(m_olValue) + "\"><select id=" + OLId() + "s" + dis +
            " style='width:20px'>" + opts + "</select></div>";
 }
 
