@@ -1,0 +1,39 @@
+--- a/src/common/sckipc.cpp
++++ b/src/common/sckipc.cpp
+@@ -84,6 +84,36 @@
+ GetAddressFromName(const wxString& serverName,
+                    const wxString& host = wxEmptyString)
+ {
++#ifdef __AMIGA__
++    // AmigaOS's TCP/IP stacks have no AF_UNIX sockets, and no services
++    // database worth the name: a server name that is not a port number (a
++    // path, as Unix programs give, or a word) is made into a port of its
++    // own, the same in every program that uses the name, and the server
++    // and its clients meet on this machine's loopback address
++    {
++        bool numeric = !serverName.empty();
++        for ( wxString::const_iterator it = serverName.begin(); it != serverName.end(); ++it )
++            if ( *it < wxT('0') || *it > wxT('9') )
++                numeric = false;
++        wxIPV4address *addr = new wxIPV4address;
++        if ( numeric )
++            addr->Service(serverName);
++        else
++        {
++            // FNV-1a over the name's UTF-8, into the dynamic ports 49152..65535
++            const wxScopedCharBuffer utf8 = serverName.utf8_str();
++            wxUint32 h = 2166136261u;
++            for ( const char *c = utf8.data(); *c; c++ )
++                h = (h ^ (unsigned char)*c) * 16777619u;
++            addr->Service((unsigned short)(49152 + h % 16384));
++        }
++        if ( !host.empty() )
++            addr->Hostname(host);
++        else
++            addr->Hostname(wxT("127.0.0.1"));
++        return addr;
++    }
++#endif // __AMIGA__
+     // we always use INET sockets under non-Unix systems
+ #if defined(__UNIX__) && !defined(__WINDOWS__) && !defined(__WINE__)
+     // under Unix, if the server name looks like a path, create a AF_UNIX
