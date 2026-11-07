@@ -92,6 +92,12 @@ public:
     virtual bool OLWantsImage() const { return false; }
     // the element was just made (set what its markup can't say)
     virtual void OLElementMade() {}
+    // true for a window that draws straight into the Intuition window's
+    // RastPort (wxGLCanvas): its element is a plain box olui copies its
+    // buffer around, and OLDrawOwn draws it each time the window is drawn
+    // where it is (x, y in the window's RastPort)
+    virtual bool OLOwnDrawn() const { return false; }
+    virtual void OLDrawOwn(int x, int y, int w, int h) { (void)x; (void)y; (void)w; (void)h; }
     // draws it (a paint event) at x, y of rp, cut to w by h, olui having
     // asked for its picture there
     void OLPaint(struct RastPort *rp, int x, int y, int w, int h);
