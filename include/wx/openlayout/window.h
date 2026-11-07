@@ -147,6 +147,9 @@ protected:
     wxNonOwnedWindow *m_olTLW;
     struct olui_el *m_olEl;
     int m_olImage;
+    // the style attribute of the element's own tag in its markup, which
+    // OLPlace() puts first (olui_set_style() replaces the attribute)
+    wxString m_olMarkupStyle;
     wxRect m_rect;          // in the parent's client coordinates
     wxString m_label;
     bool m_olPainting;
