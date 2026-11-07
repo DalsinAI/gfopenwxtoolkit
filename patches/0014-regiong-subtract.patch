@@ -1,0 +1,24 @@
+wxWidgets 3.2.12 generic wxRegion: Subtract() took the wrong difference and
+changed shared data. DoSubtract() passed (region, this) to XSubtractRegion,
+whose arguments are (minuend, subtrahend, result), so this.Subtract(rect)
+became rect minus this: empty when rect lies inside this. It also skipped
+AllocExclusive(), so every copy sharing the data (a paint's update region
+and its copies) was emptied too. OpenCPN's chart canvas copies its update
+region, subtracts the chart bar, then blits the copy: nothing was drawn.
+
+--- a/src/generic/regiong.cpp
++++ b/src/generic/regiong.cpp
+@@ -355,7 +355,12 @@
+         return true;
+     }
+ 
+-    return REGION::XSubtractRegion(M_REGIONDATA_OF(region),M_REGIONDATA,M_REGIONDATA);
++    // this minus region, on our own copy of the data: the arguments were the
++    // wrong way round (region minus this, empty for a rectangle inside this)
++    // and the data shared with other copies (a paint's update region) was
++    // changed as well
++    AllocExclusive();
++    return REGION::XSubtractRegion(M_REGIONDATA,M_REGIONDATA_OF(region),M_REGIONDATA);
+ }
+ 
+ bool wxRegionGeneric::DoXor(const wxRegion& region)

@@ -309,6 +309,24 @@ wxString wxCheckBox::OLGetMarkup() const
            Markup(GetLabelText()) + "</checkbox>";
 }
 
+// a checkbox's or radio button's size: its text, and the room olui leaves
+// for the mark at its start (a line of the font and 6 pixels) with 2 pixels
+// above and below. Without it a control had wxControl's 60 pixels, and olui
+// wrapped a label one word to a line.
+static wxSize MarkedTextBox(const wxWindow *w, const wxString& label)
+{
+    const int line = w->GetCharHeight();
+    // (a few pixels more: olui measures in its own font, which can be wider)
+    wxSize s = TextBox(w, label, line + 6 + 4, 4);
+    s.y = wxMax(s.y, line + 4);
+    return s;
+}
+
+wxSize wxCheckBox::DoGetBestSize() const
+{
+    return MarkedTextBox(this, GetLabelText());
+}
+
 void wxCheckBox::SetValue(bool value)
 {
     DoSet3StateValue(value ? wxCHK_CHECKED : wxCHK_UNCHECKED);
@@ -324,6 +342,7 @@ void wxCheckBox::DoSet3StateValue(wxCheckBoxState state)
 void wxCheckBox::SetLabel(const wxString& label)
 {
     wxCheckBoxBase::SetLabel(label);
+    InvalidateBestSize();
     OLRecreate();
 }
 
@@ -351,6 +370,11 @@ bool wxRadioButton::Create(wxWindow *parent, wxWindowID id, const wxString& labe
     if ( HasFlag(wxRB_GROUP) || !GetPreviousInGroup() )
         SetValue(true);
     return true;
+}
+
+wxSize wxRadioButton::DoGetBestSize() const
+{
+    return MarkedTextBox(this, GetLabelText());
 }
 
 wxString wxRadioButton::OLGetMarkup() const

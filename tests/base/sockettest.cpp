@@ -5,6 +5,7 @@
 // Copyright (c) 2026 AmiCradle Team
 #include <wx/init.h>
 #include <wx/socket.h>
+#include <wx/time.h>
 #include <wx/string.h>
 #include <cstdio>
 #include <cstring>
@@ -16,6 +17,28 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+
+#include <cstdarg>
+
+// each line also goes to RAM:sockettest.log, opened and closed again, so the
+// lab can read how far it got while a call stands still
+static int Say(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vprintf(fmt, ap);
+    va_end(ap);
+    fflush(stdout);
+    if ( FILE *f = fopen("RAM:sockettest.log", "a") )
+    {
+        va_start(ap, fmt);
+        vfprintf(f, fmt, ap);
+        va_end(ap);
+        fclose(f);
+    }
+    return n;
+}
+#define printf Say
 
 static int g_pass = 0, g_total = 0;
 
@@ -70,10 +93,50 @@ static void RawChecks()
 
 int main(int argc, char **argv)
 {
+    remove("RAM:sockettest.log");
     wxInitializer init(argc, argv);
     Check(init.IsOk(), "wx initialised");
     Check(wxSocketBase::Initialize(), "wxSocketBase::Initialize (bsdsocket.library open)");
     RawChecks();
+
+    // empty non-blocking datagram reads on raw sockets: bound to loopback or
+    // to any address, FIONBIO before or after bind (wx sets it before);
+    // a read that stands still shows here as the last line
+    for ( int v = 0; v < 4; v++ )
+    {
+        const bool any = v & 2, before = v & 1;
+        int raw = socket(AF_INET, SOCK_DGRAM, 0);
+        struct sockaddr_in ra;
+        memset(&ra, 0, sizeof ra);
+        ra.sin_family = AF_INET;
+        ra.sin_addr.s_addr = htonl(any ? INADDR_ANY : INADDR_LOOPBACK);
+        int one = 1;
+        if ( before )
+            ioctl(raw, FIONBIO, &one);
+        bind(raw, (struct sockaddr *)&ra, sizeof ra);
+        if ( !before )
+            ioctl(raw, FIONBIO, &one);
+        printf("     raw %s, FIONBIO %s bind: fd %d reading\n", any ? "any" : "loopback", before ? "before" : "after", raw);
+        char rb[8];
+        errno = 0;
+        int rc = (int)recvfrom(raw, rb, sizeof rb, 0, NULL, NULL);
+        printf("     raw %s, FIONBIO %s bind: rc=%d errno=%d\n", any ? "any" : "loopback", before ? "before" : "after", rc, errno);
+        close(raw);
+    }
+    {
+        // wx's own datagram socket, as wx made it
+        wxIPV4address a0;
+        a0.AnyAddress();
+        a0.Service(0);
+        wxDatagramSocket w0(a0, wxSOCKET_NOWAIT);
+        const int fd = (int)w0.GetSocket();
+        printf("     FIONBIO here is 0x%lx; wx datagram fd %d as wx left it: reading\n", (unsigned long)FIONBIO, fd);
+        char rb[8];
+        errno = 0;
+        int rc = (int)recvfrom(fd, rb, sizeof rb, 0, NULL, NULL);
+        Check(rc == -1 && (errno == EAGAIN || errno == EWOULDBLOCK), "wx's datagram socket is non-blocking");
+        printf("     wx datagram fd %d: rc=%d errno=%d\n", fd, rc, errno);
+    }
 
     wxIPV4address any;
     Check(any.Hostname("127.0.0.1"), "address 127.0.0.1");
@@ -159,6 +222,65 @@ int main(int argc, char **argv)
     wxIPV4address from;
     udp.RecvFrom(from, ub, sizeof ub);
     Check(udp.LastCount() == 5 && strcmp(ub, "ping") == 0, "datagram comes back");
+
+    // nothing to read: the raw call on a non-blocking datagram socket, then
+    // wx's RecvFrom with wxSOCKET_NOWAIT (back at once) and with a timeout
+    // (back when it runs out); OpenCPN's UDP readers stood still here
+    {
+        int raw = socket(AF_INET, SOCK_DGRAM, 0);
+        struct sockaddr_in ra;
+        memset(&ra, 0, sizeof ra);
+        ra.sin_family = AF_INET;
+        ra.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        bind(raw, (struct sockaddr *)&ra, sizeof ra);
+        int one = 1;
+        ioctl(raw, FIONBIO, &one);
+        char rb[8];
+        errno = 0;
+        int rc = (int)recvfrom(raw, rb, sizeof rb, 0, NULL, NULL);
+        printf("     raw empty recvfrom rc=%d errno=%d (EAGAIN=%d EWOULDBLOCK=%d)\n", rc, errno, EAGAIN, EWOULDBLOCK);
+        fflush(stdout);
+        Check(rc == -1 && (errno == EAGAIN || errno == EWOULDBLOCK), "raw: empty datagram read would block");
+        close(raw);
+    }
+    wxIPV4address u2;
+    u2.AnyAddress();
+    u2.Service(0);
+    printf("     making the NOWAIT datagram socket\n");
+    wxDatagramSocket quiet(u2, wxSOCKET_NOWAIT);
+    char qb[8];
+    wxIPV4address qfrom;
+    {
+        // the stack's view of wx's socket before wx reads it: the same raw
+        // read, with a small address and with one as big as wx's
+        const int fd = (int)quiet.GetSocket();
+        printf("     quiet ok %d fd %d\n", (int)quiet.IsOk(), fd);
+        struct sockaddr_in sa;
+        socklen_t sl = sizeof sa;
+        errno = 0;
+        int rc = (int)recvfrom(fd, qb, sizeof qb, 0, (struct sockaddr *)&sa, &sl);
+        printf("     quiet raw recvfrom rc=%d errno=%d\n", rc, errno);
+        union { struct sockaddr a; char pad[256]; } big;
+        sl = sizeof big;
+        errno = 0;
+        rc = (int)recvfrom(fd, qb, sizeof qb, 0, &big.a, &sl);
+        printf("     quiet raw recvfrom (256-byte address) rc=%d errno=%d\n", rc, errno);
+        printf("     wx RecvFrom NOWAIT next\n");
+    }
+    wxLongLong t0 = wxGetLocalTimeMillis();
+    quiet.RecvFrom(qfrom, qb, sizeof qb);
+    long ms = (long)(wxGetLocalTimeMillis() - t0).GetValue();
+    printf("     nowait RecvFrom: %ld ms, count %u, error %d\n", ms, (unsigned)quiet.LastCount(), (int)quiet.LastError());
+    fflush(stdout);
+    Check(ms < 1000 && quiet.LastCount() == 0, "datagram: NOWAIT read returns at once");
+    quiet.SetFlags(wxSOCKET_NONE);
+    quiet.SetTimeout(2);
+    t0 = wxGetLocalTimeMillis();
+    quiet.RecvFrom(qfrom, qb, sizeof qb);
+    ms = (long)(wxGetLocalTimeMillis() - t0).GetValue();
+    printf("     timeout RecvFrom: %ld ms, count %u, error %d\n", ms, (unsigned)quiet.LastCount(), (int)quiet.LastError());
+    fflush(stdout);
+    Check(ms >= 1500 && ms < 5000 && quiet.LastError() == wxSOCKET_TIMEDOUT, "datagram: read gives up after its timeout");
 
     wxSocketBase::Shutdown();
     printf("sockettest: %d of %d passed\n", g_pass, g_total);
