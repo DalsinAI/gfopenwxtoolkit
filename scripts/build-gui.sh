@@ -168,6 +168,6 @@ for t in "$HERE"/tests/gui/*.cpp; do
     # shellcheck disable=SC2046
     m68k-amigaos-g++ -noixemul -m68040 -O2 -std=gnu++17 $("$W" --cxxflags) -c "$t" -o "$G/obj/test-$n.o"
     # shellcheck disable=SC2046
-    m68k-amigaos-g++ -noixemul -m68040 $BASEREL -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUT/$n" "$G/obj/test-$n.o" $("$W" --libs core,base)
+    m68k-amigaos-g++ -noixemul -m68040 $BASEREL -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUT/$n" "$G/obj/test-$n.o" $("$W" --libs core,base,net)
 done
 du -sh "$SDK"

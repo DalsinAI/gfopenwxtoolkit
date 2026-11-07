@@ -1,0 +1,645 @@
+--- a/include/wx/unix/chkconf.h
++++ b/include/wx/unix/chkconf.h
+@@ -21,7 +21,7 @@
+ #endif /* wxUSE_CONSOLE_EVENTLOOP */
+ 
+ #if wxUSE_FSWATCHER
+-#   if !defined(wxHAS_INOTIFY) && !defined(wxHAS_KQUEUE)
++#   if !defined(wxHAS_INOTIFY) && !defined(wxHAS_KQUEUE) && !defined(__AMIGA__)
+ #       ifdef wxABORT_ON_CONFIG_ERROR
+ #           error "wxFileSystemWatcher requires either inotify() or kqueue()"
+ #       else
+--- a/include/wx/private/fswatcher.h
++++ b/include/wx/private/fswatcher.h
+@@ -27,6 +27,15 @@
+     #define wxFSWatchEntry wxFSWatchEntryMSW
+     WX_DECLARE_STRING_HASH_MAP(wxSharedPtr<wxFSWatchEntry>,wxFSWatchEntries);
+     #include "wx/msw/private/fswatcher.h"
++#elif defined(__AMIGA__)
++    // AmigaOS: a watched path, as wx gave it (src/generic/fswatcherg.cpp)
++    class wxFSWatchEntryAmiga : public wxFSWatchInfo
++    {
++    public:
++        wxFSWatchEntryAmiga(const wxFSWatchInfo& winfo) : wxFSWatchInfo(winfo) { }
++    };
++    #define wxFSWatchEntry wxFSWatchEntryAmiga
++    WX_DECLARE_STRING_HASH_MAP(wxSharedPtr<wxFSWatchEntry>,wxFSWatchEntries);
+ #else
+     #define wxFSWatchEntry wxFSWatchEntryPolling
+ #endif
+--- a/include/wx/generic/fswatcher.h
++++ b/include/wx/generic/fswatcher.h
+@@ -17,7 +17,18 @@
+ class WXDLLIMPEXP_BASE wxPollingFileSystemWatcher : public wxFileSystemWatcherBase
+ {
+ public:
++#ifdef __AMIGA__
++    // AmigaOS: dos.library's notification (src/generic/fswatcherg.cpp)
++    wxPollingFileSystemWatcher();
+ 
++    wxPollingFileSystemWatcher(const wxFileName& path,
++                               int events = wxFSW_EVENT_ALL);
++
++    virtual ~wxPollingFileSystemWatcher();
++
++protected:
++    bool Init();
++#endif // __AMIGA__
+ };
+ 
+ #endif // wxUSE_FSWATCHER
+--- a/src/generic/fswatcherg.cpp
++++ b/src/generic/fswatcherg.cpp
+@@ -15,4 +15,592 @@
+ 
+ #include "wx/fswatcher.h"
+ 
++#ifdef __AMIGA__
++
++// ----------------------------------------------------------------------------
++// AmigaOS: dos.library's notification (StartNotify) tells that a file, or
++// something in a folder, changed, not what: a thread of the watcher's own
++// gets the messages, reads the folder again and says what is new, gone or
++// changed against what it read before. A file system without notification
++// is read again every two seconds instead.
++// (c) 2026 AmiCradle Team, wxWindows licence
++// ----------------------------------------------------------------------------
++
++#include "wx/private/fswatcher.h"
++#include "wx/thread.h"
++#include "wx/dir.h"
++#include "wx/vector.h"
++#include "wx/hashmap.h"
++
++#include <exec/ports.h>
++#include <exec/tasks.h>
++#include <dos/dos.h>
++#include <dos/notify.h>
++#include <clib/exec_protos.h>
++#include <clib/dos_protos.h>
++
++namespace
++{
++
++// what a folder held, or a file was, when last read
++struct wxAmigaFSStat
++{
++    bool isDir;
++    wxULongLong size;
++    time_t mtime;
++};
++WX_DECLARE_STRING_HASH_MAP(wxAmigaFSStat, wxAmigaFSSnapshot);
++
++// one path the thread watches: the user's, or a folder found under a tree
++struct wxAmigaFSNode
++{
++    wxString path;              // as wx gave it (a folder's with its separator)
++    wxCharBuffer name;          // the same for dos.library
++    int events;
++    wxFSWPathType type;
++    wxString filespec;
++    bool own;                   // added under a tree watch by the thread
++    struct NotifyRequest nr;
++    bool notifying;
++    bool exists;
++    wxAmigaFSStat self;         // a file's
++    wxAmigaFSSnapshot entries;  // a folder's
++};
++
++bool wxAmigaFSStatOf(const wxString& path, wxAmigaFSStat *st)
++{
++    wxFileName fn(path);
++    if ( wxFileName::DirExists(path) )
++    {
++        st->isDir = true;
++        st->size = 0;
++        wxDateTime m;
++        st->mtime = fn.GetTimes(NULL, &m, NULL) && m.IsValid() ? m.GetTicks() : 0;
++        return true;
++    }
++    if ( !wxFileName::FileExists(path) )
++        return false;
++    st->isDir = false;
++    st->size = fn.GetSize();
++    wxDateTime m;
++    st->mtime = fn.GetTimes(NULL, &m, NULL) && m.IsValid() ? m.GetTicks() : 0;
++    return true;
++}
++
++wxString wxAmigaFSChild(const wxString& dir, const wxString& name)
++{
++    if ( dir.empty() || dir.Last() == wxT('/') || dir.Last() == wxT(':') )
++        return dir + name;
++    return dir + wxT("/") + name;
++}
++
++void wxAmigaFSReadDir(const wxString& path, wxAmigaFSSnapshot *out)
++{
++    out->clear();
++    wxDir dir;
++    {
++        wxLogNull quiet;
++        if ( !dir.Open(path) )
++            return;
++    }
++    wxString name;
++    for ( bool ok = dir.GetFirst(&name, wxEmptyString, wxDIR_FILES | wxDIR_DIRS | wxDIR_HIDDEN);
++          ok; ok = dir.GetNext(&name) )
++    {
++        wxAmigaFSStat st;
++        if ( wxAmigaFSStatOf(wxAmigaFSChild(path, name), &st) )
++            (*out)[name] = st;
++    }
++}
++
++} // anonymous namespace
++
++class wxFSWatcherImplAmiga;
++
++// the watcher's thread: it owns the notifications and the snapshots
++class wxAmigaFSThread : public wxThread
++{
++public:
++    wxAmigaFSThread(wxFSWatcherImplAmiga *impl)
++        : wxThread(wxTHREAD_JOINABLE), m_impl(impl), m_started(0, 1), m_done(0, 1),
++          m_cmd(NULL), m_task(NULL), m_cmdSig(-1), m_port(NULL), m_ok(false)
++    {
++    }
++
++    // false when the thread could not be started
++    bool Start()
++    {
++        if ( Create() != wxTHREAD_NO_ERROR || Run() != wxTHREAD_NO_ERROR )
++            return false;
++        m_started.Wait();
++        return m_ok;
++    }
++
++    // from the watcher (the main thread): done before it returns
++    bool AddNode(const wxFSWatchInfo& info)
++    {
++        Command c;
++        c.what = Command::Add;
++        c.path = info.GetPath();
++        c.events = info.GetFlags();
++        c.type = info.GetType();
++        c.filespec = info.GetFilespec();
++        return Send(c);
++    }
++
++    bool RemoveNode(const wxString& path, bool tree)
++    {
++        Command c;
++        c.what = Command::Remove;
++        c.path = path;
++        c.type = tree ? wxFSWPath_Tree : wxFSWPath_Dir;
++        return Send(c);
++    }
++
++    void Stop()
++    {
++        Command c;
++        c.what = Command::Stop;
++        Send(c);
++        Wait();
++    }
++
++protected:
++    virtual ExitCode Entry() wxOVERRIDE;
++
++private:
++    struct Command
++    {
++        enum { Add, Remove, Stop } what;
++        wxString path;
++        int events;
++        wxFSWPathType type;
++        wxString filespec;
++        bool result;
++    };
++
++    bool Send(Command& c)
++    {
++        if ( !m_task )
++            return false;
++        {
++            wxMutexLocker lock(m_lock);
++            m_cmd = &c;
++        }
++        Signal((struct Task *)m_task, 1UL << m_cmdSig);
++        m_done.Wait();
++        return c.result;
++    }
++
++    void DoCommand(Command& c);
++    void StartNode(wxAmigaFSNode *n);
++    void EndNode(wxAmigaFSNode *n);
++    void DeleteNode(const wxString& path);
++    void Rescan(wxAmigaFSNode *n);
++    void Report(const wxAmigaFSNode *n, int type, const wxString& path, const wxString& newPath = wxString());
++
++    wxFSWatcherImplAmiga *m_impl;
++    wxSemaphore m_started, m_done;
++    wxMutex m_lock;
++    Command *m_cmd;
++    void *m_task;
++    int m_cmdSig;
++    struct MsgPort *m_port;
++    bool m_ok;
++    wxVector<wxAmigaFSNode *> m_nodes;
++};
++
++class wxFSWatcherImplAmiga : public wxFSWatcherImpl
++{
++public:
++    wxFSWatcherImplAmiga(wxFileSystemWatcherBase *watcher)
++        : wxFSWatcherImpl(watcher), m_thread(NULL)
++    {
++    }
++
++    virtual ~wxFSWatcherImplAmiga()
++    {
++        // the watches first: wxFSWatcherImpl's destructor can't call DoRemove
++        RemoveAll();
++        if ( m_thread )
++        {
++            m_thread->Stop();
++            delete m_thread;
++            m_thread = NULL;
++        }
++    }
++
++    virtual bool Init() wxOVERRIDE
++    {
++        m_thread = new wxAmigaFSThread(this);
++        if ( m_thread->Start() )
++            return true;
++        delete m_thread;
++        m_thread = NULL;
++        return false;
++    }
++
++    // from the thread: the owner gets it in the main thread
++    void Post(const wxFileSystemWatcherEvent& ev)
++    {
++        wxEvtHandler *owner = m_watcher->GetOwner();
++        if ( owner )
++            owner->QueueEvent(ev.Clone());
++    }
++
++protected:
++    virtual bool DoAdd(wxSharedPtr<wxFSWatchEntry> watch) wxOVERRIDE
++    {
++        return m_thread && m_thread->AddNode(*watch);
++    }
++
++    virtual bool DoRemove(wxSharedPtr<wxFSWatchEntry> watch) wxOVERRIDE
++    {
++        return m_thread && m_thread->RemoveNode(watch->GetPath(), watch->GetType() == wxFSWPath_Tree);
++    }
++
++private:
++    wxAmigaFSThread *m_thread;
++};
++
++wxThread::ExitCode wxAmigaFSThread::Entry()
++{
++    m_task = FindTask(NULL);
++    m_cmdSig = AllocSignal(-1);
++    m_port = m_cmdSig >= 0 ? CreateMsgPort() : NULL;
++    m_ok = m_port != NULL;
++    if ( !m_ok )
++    {
++        if ( m_cmdSig >= 0 )
++            FreeSignal(m_cmdSig);
++        m_task = NULL;
++        m_started.Post();
++        return 0;
++    }
++    m_started.Post();
++
++    const ULONG cmdMask = 1UL << m_cmdSig, portMask = 1UL << m_port->mp_SigBit;
++    unsigned pollTicks = 0;
++    bool running = true;
++    while ( running )
++    {
++        // a file system without notification is read again every 2 s
++        bool polling = false;
++        for ( size_t i = 0; i < m_nodes.size(); i++ )
++            if ( !m_nodes[i]->notifying )
++                polling = true;
++        ULONG got;
++        if ( polling )
++        {
++            got = SetSignal(0, cmdMask | portMask) & (cmdMask | portMask);
++            if ( !got )
++            {
++                Delay(10);
++                pollTicks += 10;
++            }
++        }
++        else
++            got = ::Wait(cmdMask | portMask);
++
++        if ( got & cmdMask )
++        {
++            Command *c;
++            {
++                wxMutexLocker lock(m_lock);
++                c = m_cmd;
++                m_cmd = NULL;
++            }
++            if ( c )
++            {
++                if ( c->what == Command::Stop )
++                    running = false;
++                DoCommand(*c);
++                m_done.Post();
++            }
++        }
++        if ( got & portMask )
++        {
++            // which ones changed: each read once, after the messages
++            wxVector<wxAmigaFSNode *> changed;
++            struct NotifyMessage *m;
++            while ( (m = (struct NotifyMessage *)GetMsg(m_port)) != NULL )
++            {
++                wxAmigaFSNode *n = (wxAmigaFSNode *)m->nm_NReq->nr_UserData;
++                ReplyMsg(&m->nm_ExecMessage);
++                bool seen = false;
++                for ( size_t i = 0; i < changed.size(); i++ )
++                    if ( changed[i] == n )
++                        seen = true;
++                if ( !seen )
++                    changed.push_back(n);
++            }
++            for ( size_t i = 0; i < changed.size(); i++ )
++            {
++                // still watched (a rescan before may have taken a folder away)
++                for ( size_t j = 0; j < m_nodes.size(); j++ )
++                    if ( m_nodes[j] == changed[i] )
++                    {
++                        Rescan(changed[i]);
++                        break;
++                    }
++            }
++        }
++        if ( polling && pollTicks >= 100 )
++        {
++            pollTicks = 0;
++            for ( size_t i = 0; i < m_nodes.size(); i++ )
++                if ( !m_nodes[i]->notifying )
++                    Rescan(m_nodes[i]);
++        }
++    }
++
++    // Stop: everything ends here, in the thread whose port it is
++    while ( !m_nodes.empty() )
++        DeleteNode(m_nodes.back()->path);
++    struct Message *m;
++    while ( (m = GetMsg(m_port)) != NULL )
++        ReplyMsg(m);
++    DeleteMsgPort(m_port);
++    m_port = NULL;
++    FreeSignal(m_cmdSig);
++    return 0;
++}
++
++void wxAmigaFSThread::DoCommand(Command& c)
++{
++    c.result = true;
++    switch ( c.what )
++    {
++        case Command::Add:
++        {
++            for ( size_t i = 0; i < m_nodes.size(); i++ )
++                if ( m_nodes[i]->path == c.path )
++                {
++                    // a folder the thread found under a tree is the user's now
++                    m_nodes[i]->own = false;
++                    m_nodes[i]->events = c.events;
++                    m_nodes[i]->type = c.type;
++                    m_nodes[i]->filespec = c.filespec;
++                    return;
++                }
++            wxAmigaFSNode *n = new wxAmigaFSNode;
++            n->path = c.path;
++            n->events = c.events;
++            n->type = c.type;
++            n->filespec = c.filespec;
++            n->own = false;
++            StartNode(n);
++            m_nodes.push_back(n);
++            break;
++        }
++        case Command::Remove:
++        {
++            DeleteNode(c.path);
++            if ( c.type == wxFSWPath_Tree )
++            {
++                // and the folders the thread added under it itself
++                for ( size_t i = 0; i < m_nodes.size(); )
++                {
++                    if ( m_nodes[i]->own && m_nodes[i]->path.StartsWith(c.path) )
++                        DeleteNode(m_nodes[i]->path);
++                    else
++                        i++;
++                }
++            }
++            break;
++        }
++        case Command::Stop:
++            break;
++    }
++}
++
++void wxAmigaFSThread::StartNode(wxAmigaFSNode *n)
++{
++    // dos.library wants the name without a folder's last separator
++    wxString name = n->path;
++    if ( name.length() > 1 && name.Last() == wxT('/') )
++        name.RemoveLast();
++    n->name = name.fn_str();
++    memset(&n->nr, 0, sizeof n->nr);
++    n->nr.nr_Name = (STRPTR)n->name.data();
++    n->nr.nr_UserData = (ULONG)n;
++    n->nr.nr_Flags = NRF_SEND_MESSAGE | NRF_WAIT_REPLY;
++    n->nr.nr_stuff.nr_Msg.nr_Port = m_port;
++    n->notifying = StartNotify(&n->nr) != 0;
++
++    n->exists = wxAmigaFSStatOf(n->path, &n->self);
++    n->entries.clear();
++    if ( n->exists && n->type != wxFSWPath_File )
++        wxAmigaFSReadDir(n->path, &n->entries);
++}
++
++void wxAmigaFSThread::EndNode(wxAmigaFSNode *n)
++{
++    if ( !n->notifying )
++        return;
++    EndNotify(&n->nr);
++    n->notifying = false;
++    // its messages not yet read go back unread
++    Forbid();
++    struct Node *x = m_port->mp_MsgList.lh_Head, *next;
++    for ( ; (next = x->ln_Succ) != NULL; x = next )
++    {
++        struct NotifyMessage *m = (struct NotifyMessage *)x;
++        if ( m->nm_NReq == &n->nr )
++        {
++            ::Remove(x);
++            ReplyMsg(&m->nm_ExecMessage);
++        }
++    }
++    Permit();
++}
++
++void wxAmigaFSThread::DeleteNode(const wxString& path)
++{
++    for ( size_t i = 0; i < m_nodes.size(); i++ )
++        if ( m_nodes[i]->path == path )
++        {
++            wxAmigaFSNode *n = m_nodes[i];
++            EndNode(n);
++            m_nodes.erase(m_nodes.begin() + i);
++            delete n;
++            return;
++        }
++}
++
++void wxAmigaFSThread::Report(const wxAmigaFSNode *n, int type, const wxString& path, const wxString& newPath)
++{
++    if ( !(n->events & type) )
++        return;
++    const wxFileName fn(path), nfn(newPath.empty() ? path : newPath);
++    if ( n->type != wxFSWPath_File && !m_impl->MatchesFilespec(fn, n->filespec) )
++        return;
++    wxFileSystemWatcherEvent ev(type, fn, nfn);
++    m_impl->Post(ev);
++}
++
++void wxAmigaFSThread::Rescan(wxAmigaFSNode *n)
++{
++    wxAmigaFSStat st;
++    const bool exists = wxAmigaFSStatOf(n->path, &st);
++
++    if ( n->type == wxFSWPath_File )
++    {
++        if ( exists && !n->exists )
++            Report(n, wxFSW_EVENT_CREATE, n->path);
++        else if ( !exists && n->exists )
++            Report(n, wxFSW_EVENT_DELETE, n->path);
++        else if ( exists && (st.size != n->self.size || st.mtime != n->self.mtime) )
++            Report(n, wxFSW_EVENT_MODIFY, n->path);
++        n->exists = exists;
++        if ( exists )
++            n->self = st;
++        return;
++    }
++
++    if ( !exists )
++    {
++        if ( n->exists )
++        {
++            n->exists = false;
++            n->entries.clear();
++            Report(n, wxFSW_EVENT_DELETE, n->path);
++        }
++        // a folder found under a tree goes when it does
++        if ( n->own )
++            DeleteNode(n->path);
++        return;
++    }
++    if ( !n->exists )
++        Report(n, wxFSW_EVENT_CREATE, n->path);
++    n->exists = true;
++    n->self = st;
++
++    wxAmigaFSSnapshot now;
++    wxAmigaFSReadDir(n->path, &now);
++    wxVector<wxString> gone, made;
++    for ( wxAmigaFSSnapshot::const_iterator it = n->entries.begin(); it != n->entries.end(); ++it )
++    {
++        wxAmigaFSSnapshot::const_iterator was = now.find(it->first);
++        if ( was == now.end() )
++            gone.push_back(it->first);
++        else if ( !it->second.isDir && (was->second.size != it->second.size || was->second.mtime != it->second.mtime) )
++            Report(n, wxFSW_EVENT_MODIFY, wxAmigaFSChild(n->path, it->first));
++    }
++    for ( wxAmigaFSSnapshot::const_iterator it = now.begin(); it != now.end(); ++it )
++        if ( n->entries.find(it->first) == n->entries.end() )
++            made.push_back(it->first);
++
++    // one gone and one new, alike in kind, size and date: a rename
++    if ( gone.size() == 1 && made.size() == 1 )
++    {
++        const wxAmigaFSStat& a = n->entries[gone[0]];
++        const wxAmigaFSStat& b = now[made[0]];
++        if ( a.isDir == b.isDir && a.size == b.size && a.mtime == b.mtime )
++        {
++            Report(n, wxFSW_EVENT_RENAME, wxAmigaFSChild(n->path, gone[0]), wxAmigaFSChild(n->path, made[0]));
++            gone.clear();
++            made.clear();
++        }
++    }
++    for ( size_t i = 0; i < gone.size(); i++ )
++        Report(n, wxFSW_EVENT_DELETE, wxAmigaFSChild(n->path, gone[i]));
++    for ( size_t i = 0; i < made.size(); i++ )
++        Report(n, wxFSW_EVENT_CREATE, wxAmigaFSChild(n->path, made[i]));
++
++    // a folder made under a tree is watched too
++    if ( n->type == wxFSWPath_Tree )
++    {
++        for ( size_t i = 0; i < made.size(); i++ )
++        {
++            if ( !now[made[i]].isDir )
++                continue;
++            const wxString sub = wxAmigaFSChild(n->path, made[i]) + wxT("/");
++            bool have = false;
++            for ( size_t j = 0; j < m_nodes.size() && !have; j++ )
++                have = m_nodes[j]->path == sub;
++            if ( have )
++                continue;
++            wxAmigaFSNode *s = new wxAmigaFSNode;
++            s->path = sub;
++            s->events = n->events;
++            s->type = wxFSWPath_Tree;
++            s->filespec = n->filespec;
++            s->own = true;
++            StartNode(s);
++            m_nodes.push_back(s);
++        }
++    }
++    n->entries = now;
++}
++
++// ---- wxPollingFileSystemWatcher ----------------------------------------------
++
++wxPollingFileSystemWatcher::wxPollingFileSystemWatcher()
++    : wxFileSystemWatcherBase()
++{
++    Init();
++}
++
++wxPollingFileSystemWatcher::wxPollingFileSystemWatcher(const wxFileName& path, int events)
++    : wxFileSystemWatcherBase()
++{
++    if ( !Init() )
++        return;
++    Add(path, events);
++}
++
++wxPollingFileSystemWatcher::~wxPollingFileSystemWatcher()
++{
++}
++
++bool wxPollingFileSystemWatcher::Init()
++{
++    // kept when its thread can't start: then nothing can be added
++    m_service = new wxFSWatcherImplAmiga(this);
++    return m_service->Init();
++}
++
++#endif // __AMIGA__
++
+ #endif // wxUSE_FSWATCHER
