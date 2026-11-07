@@ -21,6 +21,17 @@ public:
             c.SetResult(s);
         });
         m_rexx.Add("FAIL", "", [](wxARexxCommand& c) { c.SetError(10, 42); });
+        // answers once a CallAfter has run (WaitFor runs queued events)
+        m_rexx.Add("WAITCALL", "", [this](wxARexxCommand& c) {
+            bool done = false;
+            CallAfter([&done]() { done = true; });
+            if ( m_rexx.WaitFor(c, [&done]() { return done; }, 2000) )
+                c.SetResult("done");
+        });
+        // never ready: RC 10 after MS milliseconds
+        m_rexx.Add("WAITNEVER", "MS/N/A", [this](wxARexxCommand& c) {
+            m_rexx.WaitFor(c, []() { return false; }, c.Number(0));
+        });
         FILE *f = fopen("RAM:arexxtest.port", "w");
         if ( f )
         {

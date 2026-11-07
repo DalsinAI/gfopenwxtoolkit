@@ -14,6 +14,9 @@
     #include "wx/toplevel.h"
 #endif
 
+#include "wx/evtloop.h"
+#include "wx/time.h"
+
 #include "wx/openlayout/arexx.h"
 
 #include <exec/memory.h>
@@ -413,6 +416,38 @@ void wxARexxPort::HandleEvent()
         DoMethodA((Object *)m_object, (Msg)&msg);
     } while ( m_again && m_object );
     m_busy = false;
+}
+
+bool wxARexxPort::WaitFor(wxARexxCommand& cmd, const std::function<bool()>& ready, long timeoutMs)
+{
+    const wxLongLong until = wxGetLocalTimeMillis() + timeoutMs;
+    for ( ;; )
+    {
+        if ( ready() )
+            return true;
+        wxTopLevelWindow *w = MainWindow();
+        wxEventLoopBase *loop = wxEventLoopBase::GetActive();
+        if ( !wxTheApp || !loop || (w && w->IsBeingDeleted()) )
+        {
+            cmd.SetError(RC_FATAL);
+            return false;
+        }
+        const long left = (until - wxGetLocalTimeMillis()).ToLong();
+        if ( left <= 0 )
+        {
+            cmd.SetError(RC_ERROR);
+            return false;
+        }
+        // the loop's own dispatch runs messages, timers and sockets, but not
+        // the events queued for later: those run between the main loop's
+        // dispatches, so they are run here too
+        if ( loop->DispatchTimeout(left < 50 ? left : 50) < 0 )
+        {
+            cmd.SetError(RC_FATAL);     // the loop is ending
+            return false;
+        }
+        wxTheApp->ProcessPendingEvents();
+    }
 }
 
 void wxARexxPort::RunCommand(unsigned id, void *p)

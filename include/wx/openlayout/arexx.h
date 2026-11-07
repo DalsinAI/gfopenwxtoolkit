@@ -93,6 +93,13 @@ public:
     // the port's full name, with its slot (FILEZILLA.1), once open
     wxString GetPortName() const { return m_portName; }
 
+    // Inside a handler, for a command that answers only once its work is
+    // done (FileZilla's CONNECT): runs the program's events, the queued
+    // ones too (QueueEvent, CallAfter), until ready() says yes (true), the
+    // time runs out (RC 10, false) or the program is closing (RC 20,
+    // false). Other ARexx commands wait until this one has answered.
+    bool WaitFor(wxARexxCommand& cmd, const std::function<bool()>& ready, long timeoutMs);
+
     // for the event loop
     void HandleEvent();
     void RunCommand(unsigned id, void *cmd);

@@ -15,6 +15,10 @@ CALL check 'HELLO no NAME', rc = 10
 CALL check 'FAIL', rc = 10
 'NOSUCH'
 CALL check 'unknown', rc >= 10   /* OS 3.2's arexx.class: 20, ours: 10 */
+'WAITCALL'
+CALL check 'WAITCALL', rc = 0 & result = 'done'
+'WAITNEVER 300'
+CALL check 'WAITNEVER', rc = 10
 'VERSION'
 CALL check 'VERSION', rc = 0 & result = 'arexxtest 1.0'
 'HELP'
