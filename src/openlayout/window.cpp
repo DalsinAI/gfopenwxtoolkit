@@ -117,7 +117,7 @@ void wxWindowOpenLayout::OLMakeElement()
     struct olui_el *container = parent ? parent->OLGetChildContainer() : NULL;
     if ( parent && parent != (wxWindow *)m_olTLW && !container )
         return;     // the parent has no element yet
-    if ( (!OLIsNative() || OLWantsImage()) && !m_olImage )
+    if ( (!OLIsNative() || OLWantsImage()) && !OLOwnDrawn() && !m_olImage )
         m_olImage = m_olTLW->OLAllocImage((wxWindow *)this);
     const std::string markup = wxOLToUTF8(OLGetMarkup());
     char err[128];
@@ -134,6 +134,8 @@ void wxWindowOpenLayout::OLMakeElement()
     if ( !IsThisEnabled() )
         olui_set_disabled(ui, m_olEl, 1);
     OLElementMade();
+    if ( OLOwnDrawn() )
+        m_olTLW->OLSetOwn((wxWindow *)this, true);
     m_olTLW->OLNeedLayout();
 }
 
@@ -149,6 +151,9 @@ void wxWindowOpenLayout::OLDropElement()
     for ( int i = 0; i < 2; i++ )
         if ( m_olBar[i] )
             m_olBar[i]->OLDropElement();
+    // (a window drawing itself is given back first: olui keeps its element)
+    if ( m_olTLW && m_olTLW != (wxNonOwnedWindow *)this )
+        m_olTLW->OLSetOwn((wxWindow *)this, false);
     if ( ui )
         olui_remove(ui, m_olEl);
     m_olEl = NULL;
@@ -188,7 +193,15 @@ void wxWindowOpenLayout::OLPlace()
     wxString decls = wxString::Format("position:absolute;left:0;top:0;width:%dpx;height:%dpx;margin:0;"
                                       "box-sizing:border-box",
                                       wxMax(m_rect.width, 0), wxMax(m_rect.height, 0));
-    if ( !OLIsNative() )
+    if ( OLOwnDrawn() )
+    {
+        // a plain box (olui notes where a box with a background is drawn,
+        // and copies its buffer around it): black unless a colour was set
+        const wxColour c = UseBgCol() ? GetBackgroundColour() : *wxBLACK;
+        decls += wxString::Format(";padding:0;border:0;overflow:hidden;background-color:#%02x%02x%02x",
+                                  c.Red(), c.Green(), c.Blue());
+    }
+    else if ( !OLIsNative() )
     {
         decls += wxString::Format(";padding:0;border:0;overflow:hidden;background-image:url(%d)", m_olImage);
         if ( UseBgCol() )
