@@ -1,0 +1,42 @@
+--- a/src/unix/threadpsx.cpp	2026-11-07 13:46:10.624784238 +0000
++++ b/src/unix/threadpsx.cpp	2026-11-07 13:46:10.638935655 +0000
+@@ -26,6 +26,11 @@
+ #if wxUSE_THREADS
+ 
+ #include "wx/thread.h"
++#ifdef __AMIGA__
++#include <stdio.h>
++#include <exec/tasks.h>
++#include <proto/exec.h>
++#endif
+ #include "wx/except.h"
+ #include "wx/scopeguard.h"
+ 
+@@ -290,6 +295,27 @@
+         int err = pthread_mutex_destroy(&m_mutex);
+         if ( err != 0 )
+         {
++#ifdef __AMIGA__
++            // lab trace (never merged): who holds the mutex at its end
++            {
++                struct Task *me = FindTask(NULL);
++                const unsigned char *b = (const unsigned char *)&m_mutex;
++                fprintf(stderr, "WXMUTEX %p err %d self %p (%s) size %u:", (void *)this, err, (void *)me,
++                        me->tc_Node.ln_Name ? me->tc_Node.ln_Name : "?", (unsigned)sizeof(m_mutex));
++                for ( unsigned i = 0; i < sizeof(m_mutex); i++ )
++                    fprintf(stderr, "%s%02x", (i % 4) ? "" : " ", b[i]);
++                fputc('\n', stderr);
++                for ( unsigned i = 0; i + 4 <= sizeof(m_mutex); i += 2 )
++                {
++                    struct Task *t = *(struct Task * const *)(b + i);
++                    if ( t && !((unsigned long)t & 1) && (unsigned long)t > 0x1000 && TypeOfMem(t) &&
++                         (t->tc_Node.ln_Type == NT_TASK || t->tc_Node.ln_Type == NT_PROCESS) )
++                        fprintf(stderr, "WXMUTEX  +%u task %p %s state %d\n", i, (void *)t,
++                                t->tc_Node.ln_Name ? t->tc_Node.ln_Name : "?", (int)t->tc_State);
++                }
++                fprintf(stderr, "WXMUTEX  main %s\n", wxThread::IsMain() ? "yes" : "no");
++            }
++#endif
+             wxLogApiError( wxT("pthread_mutex_destroy()"), err);
+         }
+     }
