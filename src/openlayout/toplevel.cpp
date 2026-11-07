@@ -424,6 +424,21 @@ void wxNonOwnedWindow::Raise()
     if ( m_olWin )
     {
         WindowToFront(m_olWin);
+        // the windows it owns stay in front of it, as a transient window
+        // does on other platforms: an application that raises its frame
+        // after showing a dialog (OpenCPN does, after every tool click)
+        // would otherwise bury the dialog behind the frame
+        for ( size_t i = 0; i < gs_open.size(); i++ )
+        {
+            wxNonOwnedWindow *w = gs_open[i];
+            if ( w == this || !w->m_olWin )
+                continue;
+            wxWindow *p = w->GetParent();
+            while ( p && !p->IsTopLevel() )
+                p = p->GetParent();
+            if ( p == this )
+                WindowToFront(w->m_olWin);
+        }
         ActivateWindow(m_olWin);
     }
 }
