@@ -34,6 +34,10 @@ public:
     virtual void OLHandleEvent(const struct olui_event& ev) wxOVERRIDE;
     virtual bool OLIsNative() const wxOVERRIDE { return true; }
 
+protected:
+    // the label on one line, with olui's room for the dot at its start
+    virtual wxSize DoGetBestSize() const wxOVERRIDE;
+
 private:
     bool m_olValue;
 

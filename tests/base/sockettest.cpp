@@ -5,6 +5,7 @@
 // Copyright (c) 2026 AmiCradle Team
 #include <wx/init.h>
 #include <wx/socket.h>
+#include <wx/time.h>
 #include <wx/string.h>
 #include <cstdio>
 #include <cstring>
@@ -159,6 +160,47 @@ int main(int argc, char **argv)
     wxIPV4address from;
     udp.RecvFrom(from, ub, sizeof ub);
     Check(udp.LastCount() == 5 && strcmp(ub, "ping") == 0, "datagram comes back");
+
+    // nothing to read: the raw call on a non-blocking datagram socket, then
+    // wx's RecvFrom with wxSOCKET_NOWAIT (back at once) and with a timeout
+    // (back when it runs out); OpenCPN's UDP readers stood still here
+    {
+        int raw = socket(AF_INET, SOCK_DGRAM, 0);
+        struct sockaddr_in ra;
+        memset(&ra, 0, sizeof ra);
+        ra.sin_family = AF_INET;
+        ra.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        bind(raw, (struct sockaddr *)&ra, sizeof ra);
+        int one = 1;
+        ioctl(raw, FIONBIO, &one);
+        char rb[8];
+        errno = 0;
+        int rc = (int)recvfrom(raw, rb, sizeof rb, 0, NULL, NULL);
+        printf("     raw empty recvfrom rc=%d errno=%d (EAGAIN=%d EWOULDBLOCK=%d)\n", rc, errno, EAGAIN, EWOULDBLOCK);
+        fflush(stdout);
+        Check(rc == -1 && (errno == EAGAIN || errno == EWOULDBLOCK), "raw: empty datagram read would block");
+        close(raw);
+    }
+    wxIPV4address u2;
+    u2.AnyAddress();
+    u2.Service(0);
+    wxDatagramSocket quiet(u2, wxSOCKET_NOWAIT);
+    char qb[8];
+    wxIPV4address qfrom;
+    wxLongLong t0 = wxGetLocalTimeMillis();
+    quiet.RecvFrom(qfrom, qb, sizeof qb);
+    long ms = (long)(wxGetLocalTimeMillis() - t0).GetValue();
+    printf("     nowait RecvFrom: %ld ms, count %u, error %d\n", ms, (unsigned)quiet.LastCount(), (int)quiet.LastError());
+    fflush(stdout);
+    Check(ms < 1000 && quiet.LastCount() == 0, "datagram: NOWAIT read returns at once");
+    quiet.SetFlags(wxSOCKET_NONE);
+    quiet.SetTimeout(2);
+    t0 = wxGetLocalTimeMillis();
+    quiet.RecvFrom(qfrom, qb, sizeof qb);
+    ms = (long)(wxGetLocalTimeMillis() - t0).GetValue();
+    printf("     timeout RecvFrom: %ld ms, count %u, error %d\n", ms, (unsigned)quiet.LastCount(), (int)quiet.LastError());
+    fflush(stdout);
+    Check(ms >= 1500 && ms < 5000 && quiet.LastError() == wxSOCKET_TIMEDOUT, "datagram: read gives up after its timeout");
 
     wxSocketBase::Shutdown();
     printf("sockettest: %d of %d passed\n", g_pass, g_total);

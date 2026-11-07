@@ -1,0 +1,32 @@
+--- a/include/wx/platinfo.h	2026-11-07 15:18:56.756243139 +0000
++++ b/include/wx/platinfo.h	2026-11-07 15:18:56.775619758 +0000
+@@ -57,7 +57,9 @@
+     // 1<<13 and 1<<14 available for other Unix flavours
+ 
+     wxOS_DOS            = 1 << 15,      // obsolete
+-    wxOS_OS2            = 1 << 16       // obsolete
++    wxOS_OS2            = 1 << 16,      // obsolete
++
++    wxOS_AMIGAOS        = 1 << 17       // AmigaOS 3 (GFOpenWX Toolkit)
+ };
+ 
+ // list of wxWidgets ports - some of them can be used with more than
+--- a/src/common/platinfo.cpp	2026-11-07 15:18:56.757828788 +0000
++++ b/src/common/platinfo.cpp	2026-11-07 15:18:56.775752551 +0000
+@@ -80,6 +80,7 @@
+     wxT("Unknown"),
+     wxT("Unknown"),
+ 
++    wxT("AmigaOS"),
+ };
+ 
+ static const wxChar* const wxPortIdNames[] =
+@@ -254,6 +255,8 @@
+         string = wxT("Windows");
+     else if ( os & wxOS_UNIX )
+         string = wxT("Unix");
++    else if ( os & wxOS_AMIGAOS )
++        string = wxT("AmigaOS");
+ 
+     return string;
+ }
