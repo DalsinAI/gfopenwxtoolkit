@@ -87,7 +87,7 @@ if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
     sed -i "s|-I\$(top_srcdir)/src/expat/expat/lib|-I$HERE/src/amiga/expat|" "$B/Makefile"
     grep -q "$HERE/src/amiga/expat" "$B/Makefile" || { echo "expat include not replaced" >&2; exit 1; }
     # wxFileSystemWatcher: configure finds neither inotify nor kqueue, but
-    # it is dos.library's notification here (patch 0014, fswatcherg.cpp)
+    # it is dos.library's notification here (patch 0017, fswatcherg.cpp)
     SETUP=$(ls "$B"/lib/wx/include/*/wx/setup.h)
     sed -i 's/^#define wxUSE_FSWATCHER .*/#define wxUSE_FSWATCHER 1/' "$SETUP"
     grep -q '^#define wxUSE_FSWATCHER 1' "$SETUP" || { echo "wxUSE_FSWATCHER not set" >&2; exit 1; }
