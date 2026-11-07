@@ -128,6 +128,25 @@ rm -f "$G"/obj/*.tmp
 [ -f "$G/obj/.clean-1" ] || { rm -f "$G/obj/common_markupparser.o"; touch "$G/obj/.clean-1"; }
 (cd "$G" && nice -n 19 make -k -j"$JOBS" all)
 
+# wx's GL library (wxGLCanvas, src/openlayout-gl) on GFOpenGPU's GL: built
+# when the stove carries the GFOpenGPU developer kit (GL/gl.h, gla/ and
+# libGL.a in its m68k-amigaos/), or GLKIT names an unpacked kit. Soft
+# float like the rest: GL's calls take their numbers on the stack either
+# way, and none of wx's GL calls gets one back.
+GLKIT=${GLKIT:-$TOOLCHAIN/m68k-amigaos}
+GLLIB=""
+if [ -f "$GLKIT/include/gla/gla_core.h" ] && [ -f "$GLKIT/include/GL/gl.h" ] && [ -f "$GLKIT/lib/libGL.a" ]; then
+    mkdir -p "$G/obj-gl"
+    m68k-amigaos-g++ $CXXF -idirafter "$GLKIT/include" -c "$T/src/common/glcmn.cpp" -o "$G/obj-gl/glcmn.o"
+    m68k-amigaos-g++ $CXXF -idirafter "$GLKIT/include" -c "$HERE/src/openlayout-gl/glcanvas.cpp" -o "$G/obj-gl/glcanvas.o"
+    rm -f "$G/libwx_openlayoutu_gl.a"
+    m68k-amigaos-ar rcs "$G/libwx_openlayoutu_gl.a" "$G/obj-gl/glcmn.o" "$G/obj-gl/glcanvas.o"
+    GLLIB="$G/libwx_openlayoutu_gl.a"
+    echo "GL: libwx_openlayoutu_gl.a on the kit in $GLKIT"
+else
+    echo "GL: no GFOpenGPU developer kit in $GLKIT (GL/gl.h, gla/gla_core.h, libGL.a): no wxGLCanvas library"
+fi
+
 # wx's minimal sample
 L="$WORK/base/lib"
 LIBS="$G/libwx_openlayoutu_core.a $OLUI_LIB $L/libwx_baseu-3.2-m68k-amigaos.a $G/libwxscintilla.a $L/libwxregexu-3.2-m68k-amigaos.a $L/libwxzlib-3.2-m68k-amigaos.a $L/libwxexpat-3.2-m68k-amigaos.a"
@@ -145,6 +164,7 @@ cp -a "$HERE/include/wx/." "$SDK/include/wx-$R/wx/"
 cp "$G/wx/setup.h" "$SDK/lib/wx/include/openlayout-unicode-static-$R/wx/setup.h"
 cp "$G/libwx_openlayoutu_core.a" "$SDK/lib/libwx_openlayoutu_core-$R.a"
 cp "$G/libwxscintilla.a" "$SDK/lib/libwxscintilla-$R.a"
+[ -n "$GLLIB" ] && cp "$GLLIB" "$SDK/lib/libwx_openlayoutu_gl-$R.a"
 cp "$OLUI_LIB" "$SDK/lib/libgfopenlayout_ui.a"
 for l in wx_baseu wx_baseu_xml wx_baseu_net wxregexu wxzlib wxexpat; do
     cp "$L/lib$l-$R-m68k-amigaos.a" "$SDK/lib/lib$l-$R.a"
@@ -170,4 +190,15 @@ for t in "$HERE"/tests/gui/*.cpp; do
     # shellcheck disable=SC2046
     m68k-amigaos-g++ -noixemul -m68040 $BASEREL -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUT/$n" "$G/obj/test-$n.o" $("$W" --libs core,base)
 done
+# the GL tests, with wx's GL library and libGL.a
+if [ -n "$GLLIB" ]; then
+    for t in "$HERE"/tests/gl/*.cpp; do
+        [ -f "$t" ] || continue
+        n=$(basename "$t" .cpp)
+        # shellcheck disable=SC2046
+        m68k-amigaos-g++ -noixemul -m68040 -O2 -std=gnu++17 $("$W" --cxxflags) -idirafter "$GLKIT/include" -c "$t" -o "$G/obj/test-$n.o"
+        # shellcheck disable=SC2046
+        m68k-amigaos-g++ -noixemul -m68040 $BASEREL -specs="$HERE/scripts/m68k-soft-m68040.specs" -s -o "$OUT/$n" "$G/obj/test-$n.o" -L"$GLKIT/lib" $("$W" --libs gl,core,base)
+    done
+fi
 du -sh "$SDK"

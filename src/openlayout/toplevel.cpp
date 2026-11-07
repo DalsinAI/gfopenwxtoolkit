@@ -119,6 +119,13 @@ static void OLUIImage(void *userdata, struct RastPort *rp, const olui_el *WXUNUS
         win->OLPaint(rp, x, y, w, h);
 }
 
+// a window that draws itself (wxGLCanvas) is asked to, its box in the
+// Intuition window's RastPort
+static void OLUIOwn(void *userdata, const olui_el *WXUNUSED(el), int x, int y, int w, int h)
+{
+    ((wxWindow *)userdata)->OLDrawOwn(x, y, w, h);
+}
+
 // ---- wxNonOwnedWindow ---------------------------------------------------------------
 
 void wxNonOwnedWindow::Init()
@@ -308,6 +315,7 @@ bool wxNonOwnedWindow::OLOpen()
     }
     olui_amiga_keys(m_olAmiga, OLUI_AMIGA_KEYS_FOCUS);
     olui_amiga_images(m_olAmiga, OLUIImage, this);
+    OLOwnAll();
     if ( struct Menu *strip = OLGetMenuStrip() )
         SetMenuStrip(m_olWin, strip);
     m_olRmbTrap = false;
@@ -599,6 +607,34 @@ void wxNonOwnedWindow::OLDrawPending()
         olui_amiga_draw(m_olAmiga);
 }
 
+bool wxNonOwnedWindow::OLSetOwn(wxWindow *win, bool own)
+{
+    size_t i = 0;
+    while ( i < m_olOwn.size() && m_olOwn[i] != win )
+        i++;
+    if ( !own )
+    {
+        if ( i == m_olOwn.size() )
+            return true;
+        m_olOwn.erase(m_olOwn.begin() + i);
+        if ( m_olAmiga && win->OLGetElement() )
+            olui_amiga_own(m_olAmiga, win->OLGetElement(), NULL, NULL);
+        return true;
+    }
+    if ( i == m_olOwn.size() )
+        m_olOwn.push_back(win);
+    if ( m_olAmiga && win->OLGetElement() )
+        return olui_amiga_own(m_olAmiga, win->OLGetElement(), OLUIOwn, win) != 0;
+    return true;
+}
+
+void wxNonOwnedWindow::OLOwnAll()
+{
+    for ( size_t i = 0; i < m_olOwn.size(); i++ )
+        if ( m_olOwn[i]->OLGetElement() )
+            olui_amiga_own(m_olAmiga, m_olOwn[i]->OLGetElement(), OLUIOwn, m_olOwn[i]);
+}
+
 int wxNonOwnedWindow::OLAllocImage(wxWindow *win)
 {
     for ( size_t i = 0; i < m_olImages.size(); i++ )
@@ -635,6 +671,12 @@ void wxNonOwnedWindow::OLForget(wxWindow *win)
     for ( size_t i = 0; i < m_olImages.size(); i++ )
         if ( m_olImages[i] == win )
             m_olImages[i] = NULL;
+    for ( size_t i = 0; i < m_olOwn.size(); i++ )
+        if ( m_olOwn[i] == win )
+        {
+            m_olOwn.erase(m_olOwn.begin() + i);
+            break;
+        }
     if ( m_olQueue )
         for ( EventQueue::iterator it = M_QUEUE.begin(); it != M_QUEUE.end(); ++it )
             if ( it->win == win )
