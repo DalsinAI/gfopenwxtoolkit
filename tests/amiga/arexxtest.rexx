@@ -14,7 +14,7 @@ CALL check 'HELLO no NAME', rc = 10
 'FAIL'
 CALL check 'FAIL', rc = 10
 'NOSUCH'
-CALL check 'unknown', rc = 10
+CALL check 'unknown', rc >= 10   /* OS 3.2's arexx.class: 20, ours: 10 */
 'VERSION'
 CALL check 'VERSION', rc = 0 & result = 'arexxtest 1.0'
 'HELP'
