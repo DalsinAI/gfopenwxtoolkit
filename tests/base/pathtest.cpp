@@ -76,6 +76,11 @@ int main(int argc, char **argv)
         wxFileName d;
         d.AssignDir("RAM:T");
         Check("AssignDir(RAM:T) full path is RAM:T/", d.GetFullPath() == "RAM:T/");
+        // a temporary file in a volume (wxWebRequest's downloads)
+        const wxString tmp = wxFileName::CreateTempFileName("T:wxd");
+        Check("CreateTempFileName(T:wxd) is T:wxd...", tmp.StartsWith("T:wxd") && wxFileExists(tmp));
+        if ( !tmp.empty() )
+            wxRemoveFile(tmp);
     }
     // wxFileSystem on volume paths, as Code::Blocks opens its resources
     {
