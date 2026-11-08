@@ -1,6 +1,37 @@
 --- a/src/common/filename.cpp
 +++ b/src/common/filename.cpp
-@@ -2222,6 +2222,13 @@
+@@ -917,6 +917,19 @@
+     // use the directory specified by the prefix
+     wxFileName::SplitPath(prefix, &dir, &name, NULL /* extension */);
+ 
++#if defined(__AMIGA__)
++    // AmigaOS: "T:wxd" is wxd in T: (SplitPath sees no separator)
++    if ( dir.empty() )
++    {
++        const size_t colon = name.rfind(wxT(':'));
++        if ( colon != wxString::npos )
++        {
++            dir = name.substr(0, colon + 1);
++            name = name.substr(colon + 1);
++        }
++    }
++#endif // __AMIGA__
++
+     if (dir.empty())
+     {
+         dir = wxFileName::GetTempDir();
+@@ -935,6 +948,10 @@
+     path = dir;
+ 
+     if ( !wxEndsWithPathSeparator(dir) &&
++#if defined(__AMIGA__)
++            // (a volume, "T:", is followed directly by the name)
++            !dir.EndsWith(wxT(":")) &&
++#endif
+             (name.empty() || !wxIsPathSeparator(name[0u])) )
+     {
+         path += wxFILE_SEP_PATH;
+@@ -2222,6 +2239,13 @@
                  break;
          }
  
