@@ -97,7 +97,8 @@ if [ "$want_libs" = 1 ]; then
         libs="$libs $L/libwx_openlayoutu_core-$release.a $L/libgfopenlayout_ui.a $L/libwxscintilla-$release.a"
     fi
     [ "$xml" = 1 ] && libs="$libs $L/libwx_baseu_xml-$release.a"
-    [ "$net" = 1 ] && libs="$libs $L/libwx_baseu_net-$release.a"
+    # (wxWebRequest's libcurl and its HTTP/2, with the net library)
+    [ "$net" = 1 ] && libs="$libs $L/libwx_baseu_net-$release.a $L/libwxcurl-$release.a $L/libwxnghttp2-$release.a"
     libs="$libs $L/libwx_baseu-$release.a $L/libwxregexu-$release.a $L/libwxzlib-$release.a $L/libwxexpat-$release.a $L/libwxamiga-$release.a -Wl,--end-group"
     [ "$gl" = 1 ] && libs="$libs -Wl,-lGL"
     libs="$libs -Wl,-lsocket,-lpthread,-latomic,-lm,-lamiga"

@@ -32,6 +32,8 @@ else
     ARCH="$G/libwx_openlayoutu_core.a $WORK/olui/libolui.a"
     for l in wx_baseu wx_baseu_xml wx_baseu_net; do ARCH="$ARCH $BL/lib$l-$R-m68k-amigaos.a"; done
     for l in libwxpng.a libwxjpeg.a libwxscintilla.a; do [ -f "$G/$l" ] && ARCH="$ARCH $G/$l"; done
+    # wxWebRequest's libcurl and nghttp2 (scripts/build-curl.sh, -fbaserel32 here)
+    ARCH="$ARCH $WORK/curl/lib/libcurl.a $WORK/curl/lib/libnghttp2.a"
     for l in wxregexu wxzlib wxexpat; do ARCH="$ARCH $BL/lib$l-$R-m68k-amigaos.a"; done
 fi
 # The steps are kept in $L and run again only when what goes into them

@@ -446,10 +446,20 @@ wxPortId wxGUIAppTraits::GetToolkitVersion(int *majVer, int *minVer, int *microV
 }
 
 #if wxUSE_EVENTLOOP_SOURCE
+#if wxUSE_SOCKETS
+// src/openlayout/sockets.cpp: the GUI loop's sources, bsdsocket sockets
+wxEventLoopSourcesManagerBase *wxOLGetEventLoopSourcesManager();
+#endif
+
 wxEventLoopSourcesManagerBase *wxGUIAppTraits::GetEventLoopSourcesManager()
 {
+#if wxUSE_SOCKETS
+    // sockets (wxWebRequest's curl), waited on with the windows' signals
+    return wxOLGetEventLoopSourcesManager();
+#else
     // file descriptors are the console's: the GUI loop does not watch them
     return wxAppTraits::GetEventLoopSourcesManager();
+#endif
 }
 #endif
 

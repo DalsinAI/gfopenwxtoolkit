@@ -169,6 +169,9 @@ cp "$OLUI_LIB" "$SDK/lib/libgfopenlayout_ui.a"
 for l in wx_baseu wx_baseu_xml wx_baseu_net wxregexu wxzlib wxexpat; do
     cp "$L/lib$l-$R-m68k-amigaos.a" "$SDK/lib/lib$l-$R.a"
 done
+# wxWebRequest's libcurl (scripts/build-curl.sh), under the toolkit's names
+cp "$WORK/curl/lib/libcurl.a" "$SDK/lib/libwxcurl-$R.a"
+cp "$WORK/curl/lib/libnghttp2.a" "$SDK/lib/libwxnghttp2-$R.a"
 rm -f "$SDK/lib/libwxamiga-$R.a"
 m68k-amigaos-ar rcs "$SDK/lib/libwxamiga-$R.a" "$WORK/base/wxamiga_crt.o" "$WORK/base/wxamiga_stubs.o"
 cp "$HERE/scripts/wx-config" "$SDK/bin/wx-config"
