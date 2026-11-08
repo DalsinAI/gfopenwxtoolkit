@@ -11,3 +11,13 @@ REGEX_COMMIT=5541226f6edf0ccd7c1df02129ac25efa884fa2f
 # OXP, the Team's XML parser (gfopenxml oxp/): wxXmlDocument's, behind an Expat-API shim
 OXP_REPO=https://github.com/DalsinAI/gfopenxml
 OXP_COMMIT=a18c2707b3624274f7a338b0502eb0ed794e52d5
+# libcurl for wxWebRequest: gfopencurl's build (HTTP and HTTPS, TLS on
+# gfopentls.library at run time, HTTP/2 by nghttp2); its headers only from gfopentls
+GFOPENCURL_REPO=https://github.com/DalsinAI/gfopencurl
+GFOPENCURL_COMMIT=4a509eae5d0f940b5b354ad4ab1fd109c468b0c1
+GFOPENTLS_REPO=https://github.com/DalsinAI/gfopentls
+GFOPENTLS_COMMIT=a8c6c0e0b4cda1b5de66d64727e0b74d9779f9ab
+CURL_URL=https://github.com/curl/curl/releases/download/curl-8_22_0/curl-8.22.0.tar.xz
+CURL_SHA256=f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7
+NGHTTP2_URL=https://github.com/nghttp2/nghttp2/releases/download/v1.70.0/nghttp2-1.70.0.tar.xz
+NGHTTP2_SHA256=e05cb1388eaca3830aded4ccf20044b6e1ac1a61411dcca11b0437c4285c8bc2

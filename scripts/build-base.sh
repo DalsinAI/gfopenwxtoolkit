@@ -61,25 +61,36 @@ if [ "$(cat "$SRC/.patched" 2>/dev/null)" != "$PSUM" ]; then
     echo "$PSUM" > "$SRC/.patched"
 fi
 
+# libcurl, wxWebRequest's backend: gfopencurl's build (scripts/build-curl.sh)
+CURL="$WORK/curl"
+TOOLCHAIN="$TOOLCHAIN" WORK="$WORK" SRC="$SRC" NDK="$NDK" JOBS="$JOBS" sh "$HERE/scripts/build-curl.sh"
+CURLLIBS="$CURL/lib/libcurl.a $CURL/lib/libnghttp2.a"
+
 B="$WORK/base"
 # configured again when CONF, the flags, amigacompat.h or the configure patch change
 # (of the patches, only the one to configure: the others are sources, which
 # make follows). CONF names how it is configured: change it with the
 # configure line, so other edits here don't make it all again
-CONF="configure-4"
+CONF="configure-5"
 CSUM=$( (echo "$CONF $FLAGS $INC $SPECS"; cat "$COMPAT" "$HERE"/patches/0001-*.patch) | sha256sum | cut -c1-16)
 if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
     rm -rf "$B"; mkdir -p "$B"
     # libnix's wcsftime is a stub that returns 0: wx then uses strftime.
     # libnix has dlopen (libnix.a), but configure's probe redeclares it and
     # trips over dlfcn.h, which amigacompat.h brings in
-    (cd "$B" && ac_cv_func_wcsftime=no ac_cv_func_dlopen=yes ac_cv_func_dlerror=yes CFLAGS="$FLAGS" CXXFLAGS="$FLAGS" CPPFLAGS="$INC" \
+    # wxWebRequest on libcurl: configure takes curl's flags as given
+    # (there is no pkg-config for the Amiga's libraries); the libraries
+    # themselves stay out of configure's link checks (wx-config and the
+    # programs name them)
+    (cd "$B" && LIBCURL_CFLAGS="-I$CURL/include -DCURL_STATICLIB" LIBCURL_LIBS="-L$CURL/lib" \
+        ac_cv_func_wcsftime=no ac_cv_func_dlopen=yes ac_cv_func_dlerror=yes CFLAGS="$FLAGS" CXXFLAGS="$FLAGS" CPPFLAGS="$INC" \
         LDFLAGS="-noixemul -m68040 -specs=$SPECS" LIBS="-lsocket -lpthread -latomic" \
         "$SRC/configure" --host=m68k-amigaos --build="$(sh "$SRC/config.guess")" \
         --disable-gui --disable-shared --enable-unicode --disable-sys-libs \
         --with-zlib=builtin --with-regex=builtin --with-expat=builtin \
         --enable-dynlib --disable-dynamicloader --enable-threads --disable-tests \
-        --enable-sockets --disable-ipv6 --enable-ipc --disable-webrequest --without-subdirs > configure.log 2>&1) \
+        --enable-sockets --disable-ipv6 --enable-ipc --enable-webrequest --with-libcurl \
+        --enable-baseevtloop --enable-selectloop --without-subdirs > configure.log 2>&1) \
         || { tail -30 "$B/configure.log"; exit 1; }
     # static only: no position-independent code (m68k-amigaos has no GOT)
     sed -i 's/ -fPIC -DPIC//; s/^PIC_FLAG = .*/PIC_FLAG =/' "$B/Makefile"
@@ -91,6 +102,11 @@ if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
     SETUP=$(ls "$B"/lib/wx/include/*/wx/setup.h)
     sed -i 's/^#define wxUSE_FSWATCHER .*/#define wxUSE_FSWATCHER 1/' "$SETUP"
     grep -q '^#define wxUSE_FSWATCHER 1' "$SETUP" || { echo "wxUSE_FSWATCHER not set" >&2; exit 1; }
+    # wxWebRequest's curl backend, and the event loop sources it watches its
+    # sockets with (the GUI loop's are src/openlayout/sockets.cpp's)
+    for u in wxUSE_WEBREQUEST wxUSE_WEBREQUEST_CURL wxUSE_CONSOLE_EVENTLOOP; do
+        grep -q "^#define $u 1" "$SETUP" || { echo "$u not set" >&2; exit 1; }
+    done
     echo "$CSUM" > "$B/.configured"
 fi
 (cd "$B" && nice -n 19 make -j"$JOBS" > make.log 2>&1) || { grep -E 'error' "$B/make.log" | head -40; exit 1; }
@@ -130,6 +146,6 @@ m68k-amigaos-gcc $FLAGS -Wall -c "$HERE/src/amiga/wxamiga_stubs.c" -o "$B/wxamig
 for t in basetest wctest sockettest ztest pathtest; do
     # shellcheck disable=SC2086
     m68k-amigaos-g++ $CXXF -I"$SRC/src/zlib" "$HERE/tests/base/$t.cpp" "$B/wxamiga_crt.o" "$B/wxamiga_stubs.o" -o "$OUT/$t" \
-        -specs="$SPECS" -s $("$B/wx-config" --libs base,xml,net) -lsocket -lpthread -latomic
+        -specs="$SPECS" -s $("$B/wx-config" --libs base,xml,net) $CURLLIBS -lsocket -lpthread -latomic
 done
 ls -l "$OUT"

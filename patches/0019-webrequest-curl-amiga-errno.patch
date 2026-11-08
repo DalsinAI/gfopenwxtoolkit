@@ -1,0 +1,30 @@
+--- a/src/common/webrequest_curl.cpp
++++ b/src/common/webrequest_curl.cpp
+@@ -29,6 +29,13 @@
+ #ifdef __WINDOWS__
+     #include "wx/hashset.h"
+     #include "wx/msw/wrapwin.h"
++#elif defined(__AMIGA__)
++    #include "wx/evtloopsrc.h"
++    #include "wx/evtloop.h"
++    // curl's sockets are bsdsocket.library's, on the C library's SocketBase
++    #include <errno.h>
++    #include <proto/bsdsocket.h>
++    #include <amitcp/socketbasetags.h>
+ #else
+     #include "wx/evtloopsrc.h"
+     #include "wx/evtloop.h"
+@@ -898,6 +905,13 @@
+     // Initialize CURL globally if no sessions are active
+     if ( ms_activeSessions == 0 )
+     {
++#ifdef __AMIGA__
++        // curl reads a failed socket call's error from errno (a connect
++        // under way is EINPROGRESS): bsdsocket.library must write it there
++        if ( SocketBase )
++            SocketBaseTags(SBTM_SETVAL(SBTC_ERRNOPTR(sizeof(errno))), (ULONG)&errno,
++                           TAG_DONE);
++#endif
+         if ( curl_global_init(CURL_GLOBAL_ALL) )
+         {
+             wxLogError(_("libcurl could not be initialized"));
