@@ -66,6 +66,17 @@ int main(int argc, char **argv)
     wxFileName fn("System:CodeBlocks/share/codeblocks/x.txt");
     fn.MakeAbsolute();
     Check("wxFileName keeps System:CodeBlocks/...", fn.GetFullPath() == "System:CodeBlocks/share/codeblocks/x.txt");
+    {
+        // a volume alone as a folder: what is in it follows the colon
+        wxFileName t;
+        t.AssignDir("T:");
+        Check("AssignDir(T:) + name is T:wxd", wxFileName(t.GetPath(), "wxd").GetFullPath() == "T:wxd");
+        Check("AssignDir(T:) full path is T:", t.GetFullPath() == "T:");
+        Check("wxFileName(RAM:, x) is RAM:x", wxFileName("RAM:", "x").GetFullPath() == "RAM:x");
+        wxFileName d;
+        d.AssignDir("RAM:T");
+        Check("AssignDir(RAM:T) full path is RAM:T/", d.GetFullPath() == "RAM:T/");
+    }
     // wxFileSystem on volume paths, as Code::Blocks opens its resources
     {
         wxFileSystem::AddHandler(new wxArchiveFSHandler);

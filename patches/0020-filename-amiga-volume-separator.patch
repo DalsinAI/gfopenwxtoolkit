@@ -1,0 +1,16 @@
+--- a/src/common/filename.cpp
++++ b/src/common/filename.cpp
+@@ -2222,6 +2222,13 @@
+                 break;
+         }
+ 
++#if defined(__AMIGA__)
++        // AmigaOS: a volume or assign ("T:") is followed directly by what
++        // is in it ("T:x"): "T:/x" would be x in T:'s parent
++        if ( format == wxPATH_UNIX && m_dirs[i].EndsWith(wxT(":")) )
++            continue;
++#endif // __AMIGA__
++
+         if ( (flags & wxPATH_GET_SEPARATOR) || (i != dirCount - 1) )
+             fullpath += GetPathSeparator(format);
+     }
