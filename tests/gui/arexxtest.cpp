@@ -28,6 +28,13 @@ public:
             if ( m_rexx.WaitFor(c, [&done]() { return done; }, 2000) )
                 c.SetResult("done");
         });
+        // answers once an idle handler has run (WaitFor runs idle handlers)
+        Bind(wxEVT_IDLE, [this](wxIdleEvent& e) { m_idled = true; e.Skip(); });
+        m_rexx.Add("WAITIDLE", "", [this](wxARexxCommand& c) {
+            m_idled = false;
+            if ( m_rexx.WaitFor(c, [this]() { return m_idled; }, 2000) )
+                c.SetResult("done");
+        });
         // never ready: RC 10 after MS milliseconds
         m_rexx.Add("WAITNEVER", "MS/N/A", [this](wxARexxCommand& c) {
             m_rexx.WaitFor(c, []() { return false; }, c.Number(0));
@@ -42,6 +49,7 @@ public:
 
 private:
     wxARexxPort m_rexx;
+    bool m_idled = false;
 };
 
 class App : public wxApp

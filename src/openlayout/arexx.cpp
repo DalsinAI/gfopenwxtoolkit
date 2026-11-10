@@ -439,14 +439,17 @@ bool wxARexxPort::WaitFor(wxARexxCommand& cmd, const std::function<bool()>& read
             return false;
         }
         // the loop's own dispatch runs messages, timers and sockets, but not
-        // the events queued for later: those run between the main loop's
-        // dispatches, so they are run here too
+        // the events queued for later or the idle handlers: those run
+        // between the main loop's dispatches, so they are run here too
+        // (wxMaxima and Code::Blocks read their tools' output in idle
+        // handlers; Team 2, 10 Nov 2026)
         if ( loop->DispatchTimeout(left < 50 ? left : 50) < 0 )
         {
             cmd.SetError(RC_FATAL);     // the loop is ending
             return false;
         }
         wxTheApp->ProcessPendingEvents();
+        wxTheApp->ProcessIdle();
     }
 }
 
