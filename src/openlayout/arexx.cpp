@@ -12,10 +12,12 @@
     #include "wx/app.h"
     #include "wx/log.h"
     #include "wx/toplevel.h"
+    #include "wx/dialog.h"
 #endif
 
 #include "wx/evtloop.h"
 #include "wx/time.h"
+#include "wx/timer.h"
 
 #include "wx/openlayout/arexx.h"
 
@@ -215,6 +217,54 @@ static wxTopLevelWindow *MainWindow()
     return wxTheApp ? wxDynamicCast(wxTheApp->GetTopWindow(), wxTopLevelWindow) : NULL;
 }
 
+// QUIT while a dialog's own loop runs (a file requester is up): closing the
+// main window there deletes the dialog under its ShowModal, and the memory
+// list is found broken at exit (Guru 81000005). The dialogs end as Cancel,
+// and a timer closes the window once their loops are over (a CallAfter
+// could run again inside the ending loop and queue itself for ever).
+static bool InModalLoop()
+{
+    wxEventLoopBase *loop = wxEventLoopBase::GetActive();
+    return wxTheApp && loop && loop != wxTheApp->GetMainLoop();
+}
+
+static void Quit(bool force, wxARexxCommand *c)
+{
+    if ( InModalLoop() )
+    {
+        for ( wxWindowList::compatibility_iterator n = wxTopLevelWindows.GetFirst(); n; n = n->GetNext() )
+        {
+            wxDialog *d = wxDynamicCast(n->GetData(), wxDialog);
+            if ( d && d->IsModal() )
+                d->EndModal(wxID_CANCEL);
+        }
+        wxTimer *t = new wxTimer();
+        t->Bind(wxEVT_TIMER, [force, t](wxTimerEvent&) {
+            if ( InModalLoop() )
+                return;
+            t->Stop();
+            wxTheApp->CallAfter([t] { delete t; });
+            Quit(force, NULL);
+        });
+        t->Start(100);
+        return;
+    }
+    wxTopLevelWindow *w = MainWindow();
+    if ( !w )
+    {
+        if ( wxTheApp )
+            wxTheApp->ExitMainLoop();
+        return;
+    }
+    if ( !w->Close(force) && !force )
+    {
+        if ( c )
+            c->SetError(RC_WARN);   // the program said no (unsaved work)
+    }
+    else if ( force && wxTheApp )
+        wxTheApp->ExitMainLoop();
+}
+
 // the standard commands, where the program has none of the same name
 void wxARexxPort::AddStandard()
 {
@@ -226,17 +276,7 @@ void wxARexxPort::AddStandard()
     };
     if ( !have("QUIT") )
         m_entries.push_back(Entry{"QUIT", "FORCE/S", [](wxARexxCommand& c) {
-            wxTopLevelWindow *w = MainWindow();
-            if ( !w )
-            {
-                if ( wxTheApp )
-                    wxTheApp->ExitMainLoop();
-                return;
-            }
-            if ( !w->Close(c.Switch(0)) && !c.Switch(0) )
-                c.SetError(RC_WARN);    // the program said no (unsaved work)
-            else if ( c.Switch(0) && wxTheApp )
-                wxTheApp->ExitMainLoop();
+            Quit(c.Switch(0), &c);
         }});
     if ( !have("ACTIVATE") )
         m_entries.push_back(Entry{"ACTIVATE", "", [](wxARexxCommand& c) {
