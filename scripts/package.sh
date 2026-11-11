@@ -13,7 +13,7 @@ T="${TMPDIR:-/tmp}/wxtk-pkg-$$"; rm -rf "$T"; mkdir -p "$T/GFOpenWXToolkit/Libs/
 P="$T/GFOpenWXToolkit"
 cp "$B/Libs/openwxtoolkit.library" "$P/Libs/"
 cp "$B/Libs/openwxtoolkit/wx.module" "$P/Libs/openwxtoolkit/"
-for t in basetest wctest sockettest xrcstart minimal; do if [ -f "$B/shared/$t" ]; then cp "$B/shared/$t" "$P/Tests/"; fi; done
+for t in basetest wctest sockettest webtest xrcstart minimal; do if [ -f "$B/shared/$t" ]; then cp "$B/shared/$t" "$P/Tests/"; fi; done
 cp "$HERE/README.md" "$HERE/DESIGN.md" "$P/Docs/"
 cp "$HERE/LICENSE-wxWindows.txt" "$P/Docs/" 2>/dev/null || true
 SHA=$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)
