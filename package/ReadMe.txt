@@ -8,10 +8,13 @@ Install:   double-click Install-GFOpenWXToolkit (beside this drawer), or
            MakeDir LIBS:openwxtoolkit
            Copy Libs/openwxtoolkit/wx.module LIBS:openwxtoolkit/
 Needs:     regex.library (GFOpenRegex), z.library (GFOpenZlib),
-           datatypes for PNG and JPEG, AmigaOS 3.2.
+           datatypes for PNG and JPEG, AmigaOS 3.2; for HTTPS with
+           wxWebRequest, gfopentls.library (GFOpenTLS).
 Tests:     CD GFOpenWXToolkit/Tests, then basetest (expects
            "basetest: 28 passed, 0 failed"), xrcstart ("xrcstart: 0 failed"),
-           wctest, sockettest, minimal (a window).
+           wctest, sockettest, webtest (fetches http://example.com/ and
+           https://example.com/, expects "webtest: all 2 ok"),
+           minimal (a window).
 Programs:  build with The Open SDK: WXTK_SHARED=1 wx-config --libs links
            a program against the library instead of a static wx.
 

@@ -24,4 +24,4 @@ cp -a "$W/out/Libs" "$OUTD/"
 ls -lR "$OUTD/Libs" "$OUTD/shared"
 : > "$OUTD/exit-0"
 # the package (Installer script, library, module, tests)
-sh "$HERE/scripts/package.sh" "$OUTD" "$OUTD" "${WXTK_PKG_VERSION:-1.0-rc1}" || echo "package failed"
+sh "$HERE/scripts/package.sh" "$OUTD" "$OUTD" "${WXTK_PKG_VERSION:-1.0-rc2}" || echo "package failed"

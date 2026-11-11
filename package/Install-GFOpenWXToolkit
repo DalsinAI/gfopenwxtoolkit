@@ -1,10 +1,10 @@
-; $VER: Install-GFOpenWXToolkit 1.0-rc1 (6.11.2026)
+; $VER: Install-GFOpenWXToolkit 1.0-rc2 (11.11.2026)
 ; The Amiga Installer script for GFOpenWX Toolkit: openwxtoolkit.library and
 ; its wx module, which wx programs built shared use, and, if wanted, the tests.
 ; Run it from its icon, beside the GFOpenWXToolkit drawer where the archive was unpacked.
 
 (set @app-name "GFOpenWXToolkit")
-(set #version "1.0-rc1")
+(set #version "1.0-rc2")
 (set #drawer "GFOpenWXToolkit")
 
 (onerror

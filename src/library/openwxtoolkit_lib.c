@@ -29,7 +29,7 @@
 
 #define REG(r, decl) register decl __asm(#r)
 #define LIB_VERSION 1
-#define LIB_REVISION 0
+#define LIB_REVISION 1
 
 struct WXTKBase {
     struct Library lib;
@@ -49,8 +49,8 @@ struct WXTKBase {
 int start(void) { return -1; }
 
 static const char lib_name[] = WXTK_LIBNAME;
-static const char lib_id[] = "openwxtoolkit.library 1.0 (6.11.2026) GFOpenWX Toolkit, AmiCradle Team\r\n";
-static const char lib_ver[] __attribute__((used)) = "\0$VER: openwxtoolkit.library 1.0 (6.11.2026) GFOpenWX Toolkit, AmiCradle Team";
+static const char lib_id[] = "openwxtoolkit.library 1.1 (11.11.2026) GFOpenWX Toolkit, AmiCradle Team\r\n";
+static const char lib_ver[] __attribute__((used)) = "\0$VER: openwxtoolkit.library 1.1 (11.11.2026) GFOpenWX Toolkit, AmiCradle Team";
 
 static struct Library *lib_init(REG(d0, struct WXTKBase *base), REG(a0, BPTR seglist), REG(a6, struct ExecBase *sys));
 static struct Library *lib_open(REG(a6, struct WXTKBase *base));

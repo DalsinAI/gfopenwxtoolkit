@@ -33,7 +33,7 @@ wx programs can share one wxWidgets: `openwxtoolkit.library` loads `LIBS:openwxt
 STOVE=~/AmiCradle/stoves/os32-gcc16-open6 OUT=out sh library/build-amiga.sh
 ```
 
-builds wx `-fbaserel32`, the library, its module, the tests linked shared and the package `GFOpenWXToolkit-1.0-rc1.lha` (Amiga Installer script `package/Install-GFOpenWXToolkit`). It needs regex.library and z.library at run time. `src/library/` holds the library, the glue each program links and the module's runtime; `scripts/wxtk-gen.py`, `scripts/build-library.sh` and `scripts/wxtk-absown.py` make the module.
+builds wx `-fbaserel32`, the library, its module, the tests linked shared and the package `GFOpenWXToolkit-1.0-rc2.lha` (Amiga Installer script `package/Install-GFOpenWXToolkit`). It needs regex.library and z.library at run time. `src/library/` holds the library, the glue each program links and the module's runtime; `scripts/wxtk-gen.py`, `scripts/build-library.sh` and `scripts/wxtk-absown.py` make the module.
 
 ## Layout
 
