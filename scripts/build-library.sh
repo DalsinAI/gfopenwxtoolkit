@@ -42,7 +42,11 @@ fi
 # shellcheck disable=SC2086
 # (the key covers what the kept steps are made from: the program's side
 # below them is made again every run)
-KEY=$( (ls -l --time-style=+%s $ARCH; cat "$HERE/scripts/wxtk-gen.py" "$HERE/src/library/wxtk_module_rt.c" "$HERE/src/library/wxtoolkit_library.h"
+# (an archive is keyed by its members' contents, not its date or its ar
+# headers: the build before this one re-makes archives whose objects are
+# the same, and a date key started the module's links again every run)
+akey() { for a in "$@"; do echo "$a"; m68k-amigaos-ar p "$a" | sha256sum; done; }
+KEY=$( (akey $ARCH; cat "$HERE/scripts/wxtk-gen.py" "$HERE/src/library/wxtk_module_rt.c" "$HERE/src/library/wxtoolkit_library.h"
         sed -n '/^modlink()/,/^}/p' "$0"; echo "$CF ${WXTK_ARCHIVES:-} ${WXTK_SLOTCHECK:-}") | sha256sum | cut -c1-16)
 if [ "$(cat "$L/.key" 2>/dev/null)" != "$KEY" ]; then rm -rf "$L"; fi
 mkdir -p "$L"; echo "$KEY" > "$L/.key"
