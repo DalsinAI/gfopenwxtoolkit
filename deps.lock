@@ -14,7 +14,7 @@ OXP_COMMIT=a18c2707b3624274f7a338b0502eb0ed794e52d5
 # libcurl for wxWebRequest: gfopencurl's build (HTTP and HTTPS, TLS on
 # gfopentls.library at run time, HTTP/2 by nghttp2); its headers only from gfopentls
 GFOPENCURL_REPO=https://github.com/DalsinAI/gfopencurl
-GFOPENCURL_COMMIT=5b16f293d60888d087c7d1c5a54538cd9880dd6d
+GFOPENCURL_COMMIT=9d1bc74b022fa12de8c5c89e5363addf06a11fd8
 GFOPENTLS_REPO=https://github.com/DalsinAI/gfopentls
 GFOPENTLS_COMMIT=a8c6c0e0b4cda1b5de66d64727e0b74d9779f9ab
 CURL_URL=https://github.com/curl/curl/releases/download/curl-8_22_0/curl-8.22.0.tar.xz
