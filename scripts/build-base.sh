@@ -113,7 +113,10 @@ fi
 
 # zlib is z.library's (GFOpenZlib), not wx's built-in copy: libwxzlib holds
 # only the glue that calls the library, built against wx's zlib.h (whose
-# names wx's code was compiled with)
+# names wx's code was compiled with). Which jump table a z.library has is
+# tested on the host first (tests/host/zlib_id_test.c).
+cc -Wall -Werror -I"$HERE/src/amiga" "$HERE/tests/host/zlib_id_test.c" -o "$B/zlib_id_test"
+"$B/zlib_id_test" > "$B/zlib_id_test.log" || { cat "$B/zlib_id_test.log"; exit 1; }
 # shellcheck disable=SC2086
 m68k-amigaos-gcc $FLAGS -Wall -I"$SRC/src/zlib" $INC -c "$HERE/src/amiga/wxzlib_zlibrary.c" -o "$B/wxzlib_zlibrary.o"
 # and zlib's gz* file calls, which z.library doesn't have (Golly's patterns)
