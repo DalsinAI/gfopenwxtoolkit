@@ -17,6 +17,7 @@
 #include <exec/libraries.h>
 #include <proto/exec.h>
 #include "zlib.h"
+#include "wxzlib_id.h"
 
 static struct Library* ZBase;
 static int             ZTried;
@@ -41,15 +42,13 @@ static struct Library* z_base( void )
 
         if( ZBase )
         {
-            const char* id = (const char*) ZBase->lib_IdString;
-            int gf = id && strstr( id, "GFOpenZlib" ) != NULL;
-
             /* GFOpenZlib before 53.13 had its own guessed jump table, not
-             * the Aminet z.library's that these LVOs follow: don't use it */
-            ZOld = gf && ( ZBase->lib_Version < 53
-                           || ( ZBase->lib_Version == 53 && ZBase->lib_Revision < 13 ) );
-            /* the calls past -270 are GFOpenZlib's own */
-            ZOwn = gf && !ZOld;
+             * the Aminet z.library's that these LVOs follow: don't use it.
+             * The calls past -270 are GFOpenZlib's own. */
+            int t = wxzlib_table( (const char*) ZBase->lib_IdString, ZBase->lib_Version,
+                                  ZBase->lib_Revision );
+            ZOld = t == Z_TABLE_OLD;
+            ZOwn = t == Z_TABLE_OWN;
             atexit( z_close );
         }
     }
