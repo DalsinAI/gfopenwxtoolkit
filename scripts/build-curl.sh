@@ -21,7 +21,7 @@ JOBS=${JOBS:-2}
 DL="$WORK/dl"; OUT="$WORK/curl"; CS="$WORK/curl-src"
 mkdir -p "$DL" "$CS"
 BASEREL=""; [ "${WXTK_BASEREL:-0}" = 1 ] && BASEREL=" -fbaserel32"
-CPU="-m68040 -noixemul$BASEREL${NDK:+ -idirafter $NDK}"
+CPU="-m68040 -noixemul -Wno-error=incompatible-pointer-types -Wno-incompatible-pointer-types$BASEREL${NDK:+ -idirafter $NDK}"
 # gfopencurl's script takes the compiler root (holding prefix/) and CPU flags
 OS32_GCC16=$(dirname "$TOOLCHAIN"); OS32_CPU_FLAGS="$CPU"
 export OS32_GCC16 OS32_CPU_FLAGS JOBS

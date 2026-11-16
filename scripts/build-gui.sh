@@ -126,6 +126,9 @@ done
 rm -f "$G"/obj/*.tmp
 # (once: markupparser's object from a stopped run, which lacks its symbols)
 [ -f "$G/obj/.clean-1" ] || { rm -f "$G/obj/common_markupparser.o"; touch "$G/obj/.clean-1"; }
+if [ -n "${GFAMIGA_NDK_FIXES:-}" ]; then
+    sh "$GFAMIGA_NDK_FIXES" "$SRC" "$G" || exit 1
+fi
 (cd "$G" && nice -n 19 make -k -j"$JOBS" all)
 
 # wx's GL library (wxGLCanvas, src/openlayout-gl) on GFOpenGPU's GL: built

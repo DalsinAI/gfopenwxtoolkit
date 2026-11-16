@@ -109,6 +109,9 @@ if [ "$(cat "$B/.configured" 2>/dev/null)" != "$CSUM" ]; then
     done
     echo "$CSUM" > "$B/.configured"
 fi
+if [ -n "${GFAMIGA_NDK_FIXES:-}" ]; then
+    sh "$GFAMIGA_NDK_FIXES" "$SRC" "$B" || exit 1
+fi
 (cd "$B" && nice -n 19 make -j"$JOBS" > make.log 2>&1) || { grep -E 'error' "$B/make.log" | head -40; exit 1; }
 
 # zlib is z.library's (GFOpenZlib), not wx's built-in copy: libwxzlib holds
